@@ -2,9 +2,9 @@
 using Npgsql;
 using Rebus.Tests.Contracts;
 
-namespace Rebus.PostgreSql.Tests
+namespace Rebus.Oracle.Tests
 {
-    public class PostgreSqlTestHelper
+    public class OracleTestHelper
     {
         const string TableDoesNotExist = "42P01";
         static readonly OracleConnectionHelper PostgresConnectionHelper = new OracleConnectionHelper(ConnectionString);
