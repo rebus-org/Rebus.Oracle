@@ -1,13 +1,12 @@
-﻿using System;
+﻿// ReSharper disable once RedundantUsingDirective (because .NET Core)
+using System;
 using System.Collections.Generic;
 using System.Linq;
-// ReSharper disable once RedundantUsingDirective (because .NET Core)
+using Rebus.Extensions;
 using System.Reflection;
 using System.Threading.Tasks;
-using Npgsql;
-using NpgsqlTypes;
+using Oracle.ManagedDataAccess.Client;
 using Rebus.Exceptions;
-using Rebus.Extensions;
 using Rebus.Logging;
 using Rebus.PostgreSql.Reflection;
 using Rebus.Sagas;
@@ -18,12 +17,12 @@ namespace Rebus.PostgreSql.Sagas
     /// <summary>
     /// Implementation of <see cref="ISagaStorage"/> that uses PostgreSQL to do its thing
     /// </summary>
-    public class PostgreSqlSagaStorage : ISagaStorage
+    public class OracleSqlSagaStorage : ISagaStorage
     {
         static readonly string IdPropertyName = Reflect.Path<ISagaData>(d => d.Id);
 
         readonly ObjectSerializer _objectSerializer = new ObjectSerializer();
-        readonly PostgresConnectionHelper _connectionHelper;
+        readonly OracleConnectionHelper _connectionHelper;
         readonly string _dataTableName;
         readonly string _indexTableName;
         readonly ILog _log;
@@ -31,7 +30,7 @@ namespace Rebus.PostgreSql.Sagas
         /// <summary>
         /// Constructs the saga storage
         /// </summary>
-        public PostgreSqlSagaStorage(PostgresConnectionHelper connectionHelper, string dataTableName, string indexTableName, IRebusLoggerFactory rebusLoggerFactory)
+        public OracleSqlSagaStorage(OracleConnectionHelper connectionHelper, string dataTableName, string indexTableName, IRebusLoggerFactory rebusLoggerFactory)
         {
             if (connectionHelper == null) throw new ArgumentNullException(nameof(connectionHelper));
             if (dataTableName == null) throw new ArgumentNullException(nameof(dataTableName));
@@ -40,7 +39,7 @@ namespace Rebus.PostgreSql.Sagas
             _connectionHelper = connectionHelper;
             _dataTableName = dataTableName;
             _indexTableName = indexTableName;
-            _log = rebusLoggerFactory.GetLogger<PostgreSqlSagaStorage>();
+            _log = rebusLoggerFactory.GetLogger<OracleSqlSagaStorage>();
         }
 
         /// <summary>
@@ -126,9 +125,9 @@ CREATE INDEX ON ""{_indexTableName}"" (""saga_id"");
                         command.CommandText = $@"
 SELECT s.""data"" 
     FROM ""{_dataTableName}"" s 
-    WHERE s.""id"" = @id
+    WHERE s.""id"" = :id
 ";
-                        command.Parameters.Add("id", NpgsqlDbType.Uuid).Value = ToGuid(propertyValue);
+                        command.Parameters.Add("id", OracleDbType.Raw).Value = ToGuid(propertyValue);
                     }
                     else
                     {
@@ -137,12 +136,12 @@ SELECT s.""data""
 SELECT s.""data"" 
     FROM ""{_dataTableName}"" s
     JOIN ""{_indexTableName}"" i on s.id = i.saga_id 
-    WHERE i.""saga_type"" = @saga_type AND i.""key"" = @key AND i.value = @value;
+    WHERE i.""saga_type"" = :saga_type AND i.""key"" = :key AND i.value = :value;
 ";
 
-                        command.Parameters.Add("key", NpgsqlDbType.Text).Value = propertyName;
-                        command.Parameters.Add("saga_type", NpgsqlDbType.Text).Value = GetSagaTypeName(sagaDataType);
-                        command.Parameters.Add("value", NpgsqlDbType.Text).Value = (propertyValue ?? "").ToString();
+                        command.Parameters.Add("key", OracleDbType.Varchar2).Value = propertyName;
+                        command.Parameters.Add("saga_type", OracleDbType.Varchar2).Value = GetSagaTypeName(sagaDataType);
+                        command.Parameters.Add("value", OracleDbType.Varchar2).Value = (propertyValue ?? "").ToString();
                     }
 
                     var data = (byte[])command.ExecuteScalar();
@@ -199,16 +198,16 @@ SELECT s.""data""
             {
                 using (var command = connection.CreateCommand())
                 {
-                    command.Parameters.Add("id", NpgsqlDbType.Uuid).Value = sagaData.Id;
-                    command.Parameters.Add("revision", NpgsqlDbType.Integer).Value = sagaData.Revision;
-                    command.Parameters.Add("data", NpgsqlDbType.Bytea).Value = _objectSerializer.Serialize(sagaData);
+                    command.Parameters.Add("id", OracleDbType.Raw).Value = sagaData.Id;
+                    command.Parameters.Add("revision", OracleDbType.Int64).Value = sagaData.Revision;
+                    command.Parameters.Add("data", OracleDbType.Blob).Value = _objectSerializer.Serialize(sagaData);
 
                     command.CommandText =
                         $@"
 
 INSERT 
     INTO ""{_dataTableName}"" (""id"", ""revision"", ""data"") 
-    VALUES (@id, @revision, @data);
+    VALUES (:id, :revision, :data);
 
 ";
 
@@ -216,7 +215,7 @@ INSERT
                     {
                         command.ExecuteNonQuery();
                     }
-                    catch (NpgsqlException exception)
+                    catch (OracleException exception)
                     {
                         throw new ConcurrencyException(exception, $"Saga data {sagaData.GetType()} with ID {sagaData.Id} in table {_dataTableName} could not be inserted!");
                     }
@@ -256,24 +255,24 @@ INSERT
 DELETE FROM ""{_indexTableName}"" WHERE ""saga_id"" = @id;
 
 ";
-                    command.Parameters.Add("id", NpgsqlDbType.Uuid).Value = sagaData.Id;
+                    command.Parameters.Add("id", OracleDbType.Raw).Value = sagaData.Id;
                     await command.ExecuteNonQueryAsync();
                 }
 
                 // next, update or insert the saga
                 using (var command = connection.CreateCommand())
                 {
-                    command.Parameters.Add("id", NpgsqlDbType.Uuid).Value = sagaData.Id;
-                    command.Parameters.Add("current_revision", NpgsqlDbType.Integer).Value = revisionToUpdate;
-                    command.Parameters.Add("next_revision", NpgsqlDbType.Integer).Value = nextRevision;
-                    command.Parameters.Add("data", NpgsqlDbType.Bytea).Value = _objectSerializer.Serialize(sagaData);
+                    command.Parameters.Add("id", OracleDbType.Raw).Value = sagaData.Id;
+                    command.Parameters.Add("current_revision", OracleDbType.Int64).Value = revisionToUpdate;
+                    command.Parameters.Add("next_revision", OracleDbType.Int64).Value = nextRevision;
+                    command.Parameters.Add("data", OracleDbType.Raw).Value = _objectSerializer.Serialize(sagaData);
 
                     command.CommandText =
                         $@"
 
 UPDATE ""{_dataTableName}"" 
-    SET ""data"" = @data, ""revision"" = @next_revision 
-    WHERE ""id"" = @id AND ""revision"" = @current_revision;
+    SET ""data"" = :data, ""revision"" = :next_revision 
+    WHERE ""id"" = :id AND ""revision"" = :current_revision;
 
 ";
 
@@ -310,12 +309,12 @@ UPDATE ""{_dataTableName}""
 
 DELETE 
     FROM ""{_dataTableName}"" 
-    WHERE ""id"" = @id AND ""revision"" = @current_revision;
+    WHERE ""id"" = :id AND ""revision"" = :current_revision;
 
 ";
 
-                    command.Parameters.Add("id", NpgsqlDbType.Uuid).Value = sagaData.Id;
-                    command.Parameters.Add("current_revision", NpgsqlDbType.Integer).Value = sagaData.Revision;
+                    command.Parameters.Add("id", OracleDbType.Raw).Value = sagaData.Id;
+                    command.Parameters.Add("current_revision", OracleDbType.Int64).Value = sagaData.Revision;
 
                     var rows = await command.ExecuteNonQueryAsync();
 
@@ -332,10 +331,10 @@ DELETE
 
 DELETE 
     FROM ""{_indexTableName}"" 
-    WHERE ""saga_id"" = @id
+    WHERE ""saga_id"" = :id
 
 ";
-                    command.Parameters.Add("id", NpgsqlDbType.Uuid).Value = sagaData.Id;
+                    command.Parameters.Add("id", OracleDbType.Raw).Value = sagaData.Id;
 
                     await command.ExecuteNonQueryAsync();
                 }
@@ -346,7 +345,7 @@ DELETE
             sagaData.Revision++;
         }
 
-        async Task CreateIndex(ISagaData sagaData, PostgresConnection connection, IEnumerable<KeyValuePair<string, string>> propertiesToIndex)
+        async Task CreateIndex(ISagaData sagaData, OracleDbConnection connection, IEnumerable<KeyValuePair<string, string>> propertiesToIndex)
         {
             var sagaTypeName = GetSagaTypeName(sagaData.GetType());
             var parameters = propertiesToIndex
@@ -354,8 +353,8 @@ DELETE
                 {
                     PropertyName = p.Key,
                     PropertyValue = p.Value ?? "",
-                    PropertyNameParameter = $"@n{i}",
-                    PropertyValueParameter = $"@v{i}"
+                    PropertyNameParameter = $":n{i}",
+                    PropertyValueParameter = $":v{i}"
                 })
                 .ToList();
 
@@ -369,7 +368,7 @@ DELETE
 
 INSERT
     INTO ""{_indexTableName}"" (""saga_type"", ""key"", ""value"", ""saga_id"") 
-    VALUES (@saga_type, {a.PropertyNameParameter}, {a.PropertyValueParameter}, @saga_id)
+    VALUES (:saga_type, {a.PropertyNameParameter}, {a.PropertyValueParameter}, :saga_id)
 
 ");
 
@@ -379,12 +378,12 @@ INSERT
 
                 foreach (var parameter in parameters)
                 {
-                    command.Parameters.Add(parameter.PropertyNameParameter, NpgsqlDbType.Text).Value = parameter.PropertyName;
-                    command.Parameters.Add(parameter.PropertyValueParameter, NpgsqlDbType.Text).Value = parameter.PropertyValue;
+                    command.Parameters.Add(parameter.PropertyNameParameter, OracleDbType.Varchar2).Value = parameter.PropertyName;
+                    command.Parameters.Add(parameter.PropertyValueParameter, OracleDbType.Varchar2).Value = parameter.PropertyValue;
                 }
 
-                command.Parameters.Add("saga_type", NpgsqlDbType.Text).Value = sagaTypeName;
-                command.Parameters.Add("saga_id", NpgsqlDbType.Uuid).Value = sagaData.Id;
+                command.Parameters.Add("saga_type", OracleDbType.Varchar2).Value = sagaTypeName;
+                command.Parameters.Add("saga_id", OracleDbType.Raw).Value = sagaData.Id;
 
                 await command.ExecuteNonQueryAsync();
             }

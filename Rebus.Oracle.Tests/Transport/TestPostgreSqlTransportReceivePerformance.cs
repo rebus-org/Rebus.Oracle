@@ -5,11 +5,10 @@ using System.Threading.Tasks;
 using NUnit.Framework;
 using Rebus.Activation;
 using Rebus.Config;
-using Rebus.Tests.Contracts;
-using Rebus.Tests.Contracts.Utilities;
 using Rebus.Logging;
 using Rebus.PostgreSql.Transport;
-
+using Rebus.Tests.Contracts;
+using Rebus.Tests.Contracts.Utilities;
 
 #pragma warning disable 1998
 
@@ -32,7 +31,7 @@ namespace Rebus.PostgreSql.Tests.Transport
 
             Configure.With(_adapter)
                 .Logging(l => l.ColoredConsole(LogLevel.Warn))
-                .Transport(t => t.UsePostgreSql(PostgreSqlTestHelper.ConnectionString, TableName, QueueName))
+                .Transport(t => t.UseOracle(PostgreSqlTestHelper.ConnectionString, TableName, QueueName))
                 .Options(o =>
                 {
                     o.SetNumberOfWorkers(0);

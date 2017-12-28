@@ -1,22 +1,22 @@
 ﻿using System;
 using System.Data;
 using System.Threading.Tasks;
-using Npgsql;
+using Oracle.ManagedDataAccess.Client;
 
 namespace Rebus.PostgreSql
 {
     /// <summary>
     /// Helps with managing <see cref="NpgsqlConnection"/>s
     /// </summary>
-    public class PostgresConnectionHelper
+    public class OracleConnectionHelper
     {
         readonly string _connectionString;
-        private readonly Action<NpgsqlConnection> _additionalConnectionSetupCallback;
+        private readonly Action<OracleConnection> _additionalConnectionSetupCallback;
 
         /// <summary>
         /// Constructs this thingie
         /// </summary>
-        public PostgresConnectionHelper(string connectionString)
+        public OracleConnectionHelper(string connectionString)
         {
             _connectionString = connectionString;
         }
@@ -27,7 +27,7 @@ namespace Rebus.PostgreSql
         /// <param name="connectionString">Connection string.</param>
         /// <param name="additionalConnectionSetupCallback">Additional setup to be performed prior to opening each connection. 
         /// Useful for configuring client certificate authentication, as well as set up other callbacks.</param>
-        public PostgresConnectionHelper(string connectionString, Action<NpgsqlConnection> additionalConnectionSetupCallback)
+        public OracleConnectionHelper(string connectionString, Action<OracleConnection> additionalConnectionSetupCallback)
         {
             _connectionString = connectionString;
             _additionalConnectionSetupCallback = additionalConnectionSetupCallback;
@@ -37,9 +37,9 @@ namespace Rebus.PostgreSql
         /// <summary>
         /// Gets a fresh, open and ready-to-use connection wrapper
         /// </summary>
-        public async Task<PostgresConnection> GetConnection()
+        public async Task<OracleDbConnection> GetConnection()
         {
-            var connection = new NpgsqlConnection(_connectionString);
+            var connection = new OracleConnection(_connectionString);
             
             if (_additionalConnectionSetupCallback != null)
                 _additionalConnectionSetupCallback.Invoke(connection);
@@ -48,7 +48,7 @@ namespace Rebus.PostgreSql
 
             var currentTransaction = connection.BeginTransaction(IsolationLevel.ReadCommitted);
 
-            return new PostgresConnection(connection, currentTransaction);
+            return new OracleDbConnection(connection, currentTransaction);
         }
     }
 }

@@ -19,9 +19,9 @@ namespace Rebus.PostgreSql.Transport
         /// store messages, and the "queue" specified by <paramref name="inputQueueName"/> will be used when querying for messages.
         /// The message table will automatically be created if it does not exist.
         /// </summary>
-        public static void UsePostgreSql(this StandardConfigurer<ITransport> configurer, string connectionStringOrConnectionOrConnectionStringName, string tableName, string inputQueueName)
+        public static void UseOracle(this StandardConfigurer<ITransport> configurer, string connectionStringOrConnectionOrConnectionStringName, string tableName, string inputQueueName)
         {
-            Configure(configurer, loggerFactory => new PostgresConnectionHelper(connectionStringOrConnectionOrConnectionStringName), tableName, inputQueueName);
+            Configure(configurer, loggerFactory => new OracleConnectionHelper(connectionStringOrConnectionOrConnectionStringName), tableName, inputQueueName);
         }
 
         /// <summary>
@@ -29,14 +29,14 @@ namespace Rebus.PostgreSql.Transport
         /// The table specified by <paramref name="tableName"/> will be used to store messages.
         /// The message table will automatically be created if it does not exist.
         /// </summary>
-        public static void UsePostgreSqlAsOneWayClient(this StandardConfigurer<ITransport> configurer, string connectionStringOrConnectionStringName, string tableName)
+        public static void UseOracleAsOneWayClient(this StandardConfigurer<ITransport> configurer, string connectionStringOrConnectionStringName, string tableName)
         {
-            Configure(configurer, loggerFactory => new PostgresConnectionHelper(connectionStringOrConnectionStringName), tableName, null);
+            Configure(configurer, loggerFactory => new OracleConnectionHelper(connectionStringOrConnectionStringName), tableName, null);
 
             OneWayClientBackdoor.ConfigureOneWayClient(configurer);
         }
 
-        static void Configure(StandardConfigurer<ITransport> configurer, Func<IRebusLoggerFactory, PostgresConnectionHelper> connectionProviderFactory, string tableName, string inputQueueName)
+        static void Configure(StandardConfigurer<ITransport> configurer, Func<IRebusLoggerFactory, OracleConnectionHelper> connectionProviderFactory, string tableName, string inputQueueName)
         {
             configurer.Register(context =>
             {

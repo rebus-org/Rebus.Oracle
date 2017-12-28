@@ -28,7 +28,7 @@ namespace Rebus.PostgreSql.Tests.Transport
             PostgreSqlTestHelper.DropTable(_tableName);
             var consoleLoggerFactory = new ConsoleLoggerFactory(false);
             var asyncTaskFactory = new TplAsyncTaskFactory(consoleLoggerFactory);
-            var connectionHelper = new PostgresConnectionHelper(PostgreSqlTestHelper.ConnectionString);
+            var connectionHelper = new OracleConnectionHelper(PostgreSqlTestHelper.ConnectionString);
             _transport = new PostgreSqlTransport(connectionHelper, _tableName, QueueName, consoleLoggerFactory, asyncTaskFactory);
             _transport.EnsureTableIsCreated();
 
@@ -74,6 +74,17 @@ namespace Rebus.PostgreSql.Tests.Transport
                 var transportMessage = await _transport.Receive(scope.TransactionContext, _cancellationToken);
 
                 Assert.That(transportMessage, Is.Null);
+            }
+        }
+
+        [Test]
+        public async Task RespectsSerializedAccessToUnderlyingConnectionEvenWhenCalledInParallel()
+        {
+            using (var scope = new RebusTransactionScope())
+            {
+                await Task.WhenAll(
+                    _transport.Send(QueueName, RecognizableMessage(), scope.TransactionContext),
+                    _transport.Send(QueueName, RecognizableMessage(), scope.TransactionContext));
             }
         }
 

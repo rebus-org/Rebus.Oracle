@@ -7,13 +7,13 @@ namespace Rebus.PostgreSql.Tests
     public class PostgreSqlTestHelper
     {
         const string TableDoesNotExist = "42P01";
-        static readonly PostgresConnectionHelper PostgresConnectionHelper = new PostgresConnectionHelper(ConnectionString);
+        static readonly OracleConnectionHelper PostgresConnectionHelper = new OracleConnectionHelper(ConnectionString);
 
         public static string DatabaseName => $"rebus2_test_{TestConfig.Suffix}".TrimEnd('_');
 
         public static string ConnectionString => GetConnectionStringForDatabase(DatabaseName);
 
-        public static PostgresConnectionHelper ConnectionHelper => PostgresConnectionHelper;
+        public static OracleConnectionHelper ConnectionHelper => PostgresConnectionHelper;
 
         public static void DropTable(string tableName)
         {

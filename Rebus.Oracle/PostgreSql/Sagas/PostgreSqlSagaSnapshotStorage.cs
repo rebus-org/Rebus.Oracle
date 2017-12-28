@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using NpgsqlTypes;
+using Oracle.ManagedDataAccess.Client;
 using Rebus.Auditing.Sagas;
 using Rebus.Extensions;
 using Rebus.Sagas;
@@ -16,13 +16,13 @@ namespace Rebus.PostgreSql.Sagas
     {
         readonly ObjectSerializer _objectSerializer = new ObjectSerializer();
         readonly DictionarySerializer _dictionarySerializer = new DictionarySerializer();
-        readonly PostgresConnectionHelper _connectionHelper;
+        readonly OracleConnectionHelper _connectionHelper;
         readonly string _tableName;
 
         /// <summary>
         /// Constructs the storage
         /// </summary>
-        public PostgreSqlSagaSnapshotStorage(PostgresConnectionHelper connectionHelper, string tableName)
+        public PostgreSqlSagaSnapshotStorage(OracleConnectionHelper connectionHelper, string tableName)
         {
             if (connectionHelper == null) throw new ArgumentNullException(nameof(connectionHelper));
             if (tableName == null) throw new ArgumentNullException(nameof(tableName));
@@ -44,13 +44,13 @@ namespace Rebus.PostgreSql.Sagas
 
 INSERT
     INTO ""{_tableName}"" (""id"", ""revision"", ""data"", ""metadata"")
-    VALUES (@id, @revision, @data, @metadata);
+    VALUES (:id, :revision, :data, :metadata);
 
 ";
-                    command.Parameters.Add("id", NpgsqlDbType.Uuid).Value = sagaData.Id;
-                    command.Parameters.Add("revision", NpgsqlDbType.Integer).Value = sagaData.Revision;
-                    command.Parameters.Add("data", NpgsqlDbType.Bytea).Value = _objectSerializer.Serialize(sagaData);
-                    command.Parameters.Add("metadata", NpgsqlDbType.Jsonb).Value =
+                    command.Parameters.Add("id", OracleDbType.Raw).Value = sagaData.Id;
+                    command.Parameters.Add("revision", OracleDbType.Int64).Value = sagaData.Revision;
+                    command.Parameters.Add("data", OracleDbType.Blob).Value = _objectSerializer.Serialize(sagaData);
+                    command.Parameters.Add("metadata", OracleDbType.Clob).Value =
                         _dictionarySerializer.SerializeToString(sagaAuditMetadata);
 
                     await command.ExecuteNonQueryAsync();
@@ -87,7 +87,7 @@ CREATE TABLE ""{_tableName}"" (
                     command.ExecuteNonQuery();
                 }
 
-                Task.Run(async () => await connection.Complete()).Wait();
+                connection.Complete();
             }
         }
     }

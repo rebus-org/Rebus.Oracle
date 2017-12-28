@@ -1,11 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Data;
 using System.Threading.Tasks;
-using NpgsqlTypes;
+using Oracle.ManagedDataAccess.Client;
 using Rebus.Logging;
 using Rebus.Serialization;
 using Rebus.Time;
 using Rebus.Timeouts;
+
 // ReSharper disable AccessToDisposedClosure
 
 #pragma warning disable 1998
@@ -16,24 +18,24 @@ namespace Rebus.PostgreSql.Timeouts
     /// Implementation of <see cref="ITimeoutManager"/> that uses PostgreSQL to do its thing. Can be used safely by multiple processes competing
     /// over the same table of timeouts because row-level locking is used when querying for due timeouts.
     /// </summary>
-    public class PostgreSqlTimeoutManager : ITimeoutManager
+    public class OracleTimeoutManager : ITimeoutManager
     {
         readonly DictionarySerializer _dictionarySerializer = new DictionarySerializer();
-        readonly PostgresConnectionHelper _connectionHelper;
+        readonly OracleConnectionHelper _connectionHelper;
         readonly string _tableName;
         readonly ILog _log;
 
         /// <summary>
         /// Constructs the timeout manager
         /// </summary>
-        public PostgreSqlTimeoutManager(PostgresConnectionHelper connectionHelper, string tableName, IRebusLoggerFactory rebusLoggerFactory)
+        public OracleTimeoutManager(OracleConnectionHelper connectionHelper, string tableName, IRebusLoggerFactory rebusLoggerFactory)
         {
             if (connectionHelper == null) throw new ArgumentNullException(nameof(connectionHelper));
             if (tableName == null) throw new ArgumentNullException(nameof(tableName));
             if (rebusLoggerFactory == null) throw new ArgumentNullException(nameof(rebusLoggerFactory));
             _connectionHelper = connectionHelper;
             _tableName = tableName;
-            _log = rebusLoggerFactory.GetLogger<PostgreSqlTimeoutManager>();
+            _log = rebusLoggerFactory.GetLogger<OracleTimeoutManager>();
         }
 
         /// <summary>
@@ -49,10 +51,9 @@ namespace Rebus.PostgreSql.Timeouts
                         $@"
 INSERT INTO ""{_tableName}"" (""due_time"", ""headers"", ""body"") VALUES (@due_time, @headers, @body)";
 
-                    command.Parameters.Add("due_time", NpgsqlDbType.Timestamp).Value = approximateDueTime.ToUniversalTime().DateTime;
-                    command.Parameters.Add("headers", NpgsqlDbType.Text).Value = _dictionarySerializer.SerializeToString(headers);
-                    command.Parameters.Add("body", NpgsqlDbType.Bytea).Value = body;
-
+                    command.Parameters.Add(new OracleParameter("due_time", OracleDbType.TimeStampTZ, approximateDueTime.ToUniversalTime().DateTime, ParameterDirection.Input));
+                    command.Parameters.Add(new OracleParameter("headers", OracleDbType.Clob, _dictionarySerializer.SerializeToString(headers), ParameterDirection.Input));
+                    command.Parameters.Add(new OracleParameter("body", OracleDbType.Blob, body, ParameterDirection.Input));
                     await command.ExecuteNonQueryAsync();
                 }
 
@@ -81,14 +82,14 @@ SELECT
 
 FROM ""{_tableName}"" 
 
-WHERE ""due_time"" <= @current_time 
+WHERE ""due_time"" <= :current_time 
 
 ORDER BY ""due_time""
 
 FOR UPDATE;
 
 ";
-                    command.Parameters.Add("current_time", NpgsqlDbType.Timestamp).Value = RebusTime.Now.ToUniversalTime().DateTime;
+                    command.Parameters.Add(new OracleParameter("current_time", OracleDbType.TimeStampTZ, RebusTime.Now.ToUniversalTime().DateTime, ParameterDirection.Input));
 
                     using (var reader = await command.ExecuteReaderAsync())
                     {
@@ -104,8 +105,8 @@ FOR UPDATE;
                             {
                                 using (var deleteCommand = connection.CreateCommand())
                                 {
-                                    deleteCommand.CommandText = $@"DELETE FROM ""{_tableName}"" WHERE ""id"" = @id";
-                                    deleteCommand.Parameters.Add("id", NpgsqlDbType.Bigint).Value = id;
+                                    deleteCommand.CommandText = $@"DELETE FROM ""{_tableName}"" WHERE ""id"" = :id";
+                                    command.Parameters.Add(new OracleParameter("id", OracleDbType.Int64, id, ParameterDirection.Input));
                                     await deleteCommand.ExecuteNonQueryAsync();
                                 }
                             }));
@@ -147,10 +148,10 @@ FOR UPDATE;
                     command.CommandText =
                         $@"
 CREATE TABLE ""{_tableName}"" (
-    ""id"" BIGSERIAL NOT NULL,
+    ""id""  NUMBER NOT NULL,
     ""due_time"" TIMESTAMP WITH TIME ZONE NOT NULL,
-    ""headers"" TEXT NULL,
-    ""body"" BYTEA NULL,
+    ""headers"" CLOB NULL,
+    ""body""  BLOB NULL,
     PRIMARY KEY (""id"")
 );
 ";

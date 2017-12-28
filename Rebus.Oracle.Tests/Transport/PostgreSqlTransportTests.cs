@@ -31,7 +31,7 @@ namespace Rebus.PostgreSql.Tests.Transport
              _tablesToDrop.Add(tableName);
 
             var consoleLoggerFactory = new ConsoleLoggerFactory(false);
-            var connectionHelper = new PostgresConnectionHelper(PostgreSqlTestHelper.ConnectionString);
+            var connectionHelper = new OracleConnectionHelper(PostgreSqlTestHelper.ConnectionString);
             var asyncTaskFactory = new TplAsyncTaskFactory(consoleLoggerFactory);
             var transport = new PostgreSqlTransport(connectionHelper, tableName, null, consoleLoggerFactory, asyncTaskFactory);
 
@@ -50,7 +50,7 @@ namespace Rebus.PostgreSql.Tests.Transport
             _tablesToDrop.Add(tableName);
 
             var consoleLoggerFactory = new ConsoleLoggerFactory(false);
-            var connectionHelper = new PostgresConnectionHelper(PostgreSqlTestHelper.ConnectionString);
+            var connectionHelper = new OracleConnectionHelper(PostgreSqlTestHelper.ConnectionString);
             var asyncTaskFactory = new TplAsyncTaskFactory(consoleLoggerFactory);
             var transport = new PostgreSqlTransport(connectionHelper, tableName, inputQueueAddress, consoleLoggerFactory, asyncTaskFactory);
 

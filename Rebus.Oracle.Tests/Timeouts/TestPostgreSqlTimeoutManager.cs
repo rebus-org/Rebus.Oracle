@@ -20,7 +20,7 @@ namespace Rebus.PostgreSql.Tests.Timeouts
 
         public ITimeoutManager Create()
         {
-            var postgreSqlTimeoutManager = new PostgreSqlTimeoutManager(PostgreSqlTestHelper.ConnectionHelper, "timeouts", new ConsoleLoggerFactory(false));
+            var postgreSqlTimeoutManager = new OracleTimeoutManager(PostgreSqlTestHelper.ConnectionHelper, "timeouts", new ConsoleLoggerFactory(false));
             postgreSqlTimeoutManager.EnsureTableIsCreated();
             return postgreSqlTimeoutManager;
         }

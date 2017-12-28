@@ -15,7 +15,7 @@ namespace Rebus.PostgreSql.Tests.Sagas
 
         public ISagaStorage GetSagaStorage()
         {
-            var postgreSqlSagaStorage = new PostgreSqlSagaStorage(PostgreSqlTestHelper.ConnectionHelper, "saga_data", "saga_index", new ConsoleLoggerFactory(false));
+            var postgreSqlSagaStorage = new OracleSqlSagaStorage(PostgreSqlTestHelper.ConnectionHelper, "saga_data", "saga_index", new ConsoleLoggerFactory(false));
             postgreSqlSagaStorage.EnsureTablesAreCreated();
             return postgreSqlSagaStorage;
         }

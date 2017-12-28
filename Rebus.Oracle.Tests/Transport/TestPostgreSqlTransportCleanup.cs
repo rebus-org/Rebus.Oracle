@@ -33,7 +33,7 @@ namespace Rebus.PostgreSql.Tests.Transport
 
                 Configure.With(_activator)
                     .Logging(l => l.Use(_loggerFactory))
-                    .Transport(t => t.UsePostgreSql(PostgreSqlTestHelper.ConnectionString, "Messages", queueName))
+                    .Transport(t => t.UseOracle(PostgreSqlTestHelper.ConnectionString, "Messages", queueName))
                     .Start();
             }
 
