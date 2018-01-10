@@ -8,28 +8,28 @@ using NUnit.Framework;
 using Rebus.Extensions;
 using Rebus.Logging;
 using Rebus.Messages;
-using Rebus.PostgreSql.Transport;
+using Rebus.Oracle.Transport;
 using Rebus.Tests.Contracts;
 using Rebus.Threading.TaskParallelLibrary;
 using Rebus.Transport;
 
-namespace Rebus.PostgreSql.Tests.Transport
+namespace Rebus.Oracle.Tests.Transport
 {
-    [TestFixture, Category(Categories.PostgreSql)]
+    [TestFixture, Category(Categories.Oracle)]
     public class TestPostgreSqlTransport : FixtureBase
     {
         readonly string _tableName = "messages" + TestConfig.Suffix;
-        PostgreSqlTransport _transport;
+        OracleTransport _transport;
         CancellationToken _cancellationToken;
         const string QueueName = "input";
 
         protected override void SetUp()
         {
-            PostgreSqlTestHelper.DropTable(_tableName);
+            OracleTestHelper.DropTable(_tableName);
             var consoleLoggerFactory = new ConsoleLoggerFactory(false);
             var asyncTaskFactory = new TplAsyncTaskFactory(consoleLoggerFactory);
-            var connectionHelper = new OracleConnectionHelper(PostgreSqlTestHelper.ConnectionString);
-            _transport = new PostgreSqlTransport(connectionHelper, _tableName, QueueName, consoleLoggerFactory, asyncTaskFactory);
+            var connectionHelper = new OracleConnectionHelper(OracleTestHelper.ConnectionString);
+            _transport = new OracleTransport(connectionHelper, _tableName, QueueName, consoleLoggerFactory, asyncTaskFactory);
             _transport.EnsureTableIsCreated();
 
             Using(_transport);

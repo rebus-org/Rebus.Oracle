@@ -2,10 +2,11 @@
 using Oracle.ManagedDataAccess.Client;
 using Rebus.Auditing.Sagas;
 using Rebus.Logging;
-using Rebus.PostgreSql;
-using Rebus.PostgreSql.Sagas;
-using Rebus.PostgreSql.Subscriptions;
-using Rebus.PostgreSql.Timeouts;
+using Rebus.Oracle;
+using Rebus.Oracle.Sagas;
+using Rebus.Oracle.Subscriptions;
+using Rebus.Oracle.Timeouts;
+using Rebus.Sagas;
 using Rebus.Sagas;
 using Rebus.Subscriptions;
 using Rebus.Timeouts;
@@ -26,7 +27,7 @@ namespace Rebus.Config
         {
             configurer.Register(c =>
             {
-                var sagaStorage = new PostgreSqlSagaSnapshotStorage(new OracleConnectionHelper(connectionString, additionalConnectionSetup), tableName);
+                var sagaStorage = new OracleSagaSnapshotStorage(new OracleConnectionHelper(connectionString, additionalConnectionSetup), tableName);
 
                 if (automaticallyCreateTables)
                 {
@@ -90,7 +91,7 @@ namespace Rebus.Config
             {
                 var rebusLoggerFactory = c.Get<IRebusLoggerFactory>();
                 var connectionHelper = new OracleConnectionHelper(connectionString, additionalConnectionSetup);
-                var subscriptionStorage = new PostgreSqlSubscriptionStorage(
+                var subscriptionStorage = new OracleSubscriptionStorage(
                     connectionHelper, tableName, isCentralized, rebusLoggerFactory);
 
                 if (automaticallyCreateTables)

@@ -1,11 +1,11 @@
 ﻿using System.Collections.Generic;
 using Rebus.Auditing.Sagas;
-using Rebus.PostgreSql.Sagas;
+using Rebus.Oracle.Sagas;
 using Rebus.Sagas;
 using Rebus.Serialization;
 using Rebus.Tests.Contracts.Sagas;
 
-namespace Rebus.PostgreSql.Tests.Sagas
+namespace Rebus.Oracle.Tests.Sagas
 {
     public class PostgreSqlSnapshotStorageFactory : ISagaSnapshotStorageFactory
     {
@@ -13,12 +13,12 @@ namespace Rebus.PostgreSql.Tests.Sagas
 
         public PostgreSqlSnapshotStorageFactory()
         {
-            PostgreSqlTestHelper.DropTable(TableName);
+            OracleTestHelper.DropTable(TableName);
         }
 
         public ISagaSnapshotStorage Create()
         {
-            var snapshotStorage = new PostgreSqlSagaSnapshotStorage(PostgreSqlTestHelper.ConnectionHelper, TableName);
+            var snapshotStorage = new OracleSagaSnapshotStorage(OracleTestHelper.ConnectionHelper, TableName);
 
             snapshotStorage.EnsureTableIsCreated();
 
@@ -27,7 +27,7 @@ namespace Rebus.PostgreSql.Tests.Sagas
 
         public IEnumerable<SagaDataSnapshot> GetAllSnapshots()
         {
-            using (var connection = PostgreSqlTestHelper.ConnectionHelper.GetConnection().Result)
+            using (var connection = OracleTestHelper.ConnectionHelper.GetConnection().Result)
             {
                 using (var command = connection.CreateCommand())
                 {

@@ -6,7 +6,7 @@ using Rebus.Timeouts;
 
 namespace Rebus.Oracle.Tests.Timeouts
 {
-    [TestFixture, Category(TestCategory.Postgres)]
+    [TestFixture, Category(TestCategory.Oracle)]
     public class TestOracleTimeoutManager : BasicStoreAndRetrieveOperations<OracleTimeoutManagerFactory>
     {
     }

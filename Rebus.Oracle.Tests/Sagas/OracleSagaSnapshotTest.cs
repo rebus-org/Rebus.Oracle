@@ -3,6 +3,6 @@ using Rebus.Tests.Contracts.Sagas;
 
 namespace Rebus.Oracle.Tests.Sagas
 {
-    [TestFixture, Category(TestCategory.Postgres)]
+    [TestFixture, Category(TestCategory.Oracle)]
     public class OracleSagaSnapshotTest : SagaSnapshotStorageTest<OracleSnapshotStorageFactory> { }
 }

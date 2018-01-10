@@ -1,9 +1,9 @@
 ﻿using NUnit.Framework;
 using Rebus.Tests.Contracts.Subscriptions;
 
-namespace Rebus.PostgreSql.Tests.Subscriptions
+namespace Rebus.Oracle.Tests.Subscriptions
 {
-    [TestFixture, Category(TestCategory.Postgres)]
+    [TestFixture, Category(TestCategory.Oracle)]
     public class PostgreSqlSubscriptionStorageBasicSubscriptionOperations : BasicSubscriptionOperations<PostgreSqlSubscriptionStorageFactory>
     {
     }

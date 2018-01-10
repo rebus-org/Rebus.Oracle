@@ -3,7 +3,7 @@ using Rebus.Tests.Contracts.Subscriptions;
 
 namespace Rebus.Oracle.Tests.Subscriptions
 {
-    [TestFixture, Category(TestCategory.Postgres)]
+    [TestFixture, Category(TestCategory.Oracle)]
     public class OracleSubscriptionStorageBasicSubscriptionOperations : BasicSubscriptionOperations<OracleSubscriptionStorageFactory>
     {
     }

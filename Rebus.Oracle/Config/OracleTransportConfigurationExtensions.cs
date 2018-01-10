@@ -1,13 +1,14 @@
 ﻿using System;
-using Rebus.Config;
 using Rebus.Logging;
+using Rebus.Oracle;
+using Rebus.Oracle.Transport;
 using Rebus.Pipeline;
 using Rebus.Pipeline.Receive;
 using Rebus.Threading;
 using Rebus.Timeouts;
 using Rebus.Transport;
 
-namespace Rebus.Oracle.Transport
+namespace Rebus.Config
 {
     /// <summary>
     /// Configuration extensions for the SQL transport

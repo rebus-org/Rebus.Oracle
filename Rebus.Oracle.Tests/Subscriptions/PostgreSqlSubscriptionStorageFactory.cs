@@ -1,9 +1,9 @@
 ﻿using Rebus.Logging;
-using Rebus.PostgreSql.Subscriptions;
+using Rebus.Oracle.Subscriptions;
 using Rebus.Subscriptions;
 using Rebus.Tests.Contracts.Subscriptions;
 
-namespace Rebus.PostgreSql.Tests.Subscriptions
+namespace Rebus.Oracle.Tests.Subscriptions
 {
     public class PostgreSqlSubscriptionStorageFactory : ISubscriptionStorageFactory
     {
@@ -14,14 +14,14 @@ namespace Rebus.PostgreSql.Tests.Subscriptions
 
         public ISubscriptionStorage Create()
         {
-            var subscriptionStorage = new PostgreSqlSubscriptionStorage(PostgreSqlTestHelper.ConnectionHelper, "subscriptions", true, new ConsoleLoggerFactory(false));
+            var subscriptionStorage = new OracleSubscriptionStorage(OracleTestHelper.ConnectionHelper, "subscriptions", true, new ConsoleLoggerFactory(false));
             subscriptionStorage.EnsureTableIsCreated();
             return subscriptionStorage;
         }
 
         public void Cleanup()
         {
-            PostgreSqlTestHelper.DropTable("subscriptions");
+            OracleTestHelper.DropTable("subscriptions");
         }
     }
 }

@@ -1,12 +1,12 @@
 ﻿using NUnit.Framework;
 using Rebus.Logging;
-using Rebus.PostgreSql.Timeouts;
+using Rebus.Oracle.Timeouts;
 using Rebus.Tests.Contracts.Timeouts;
 using Rebus.Timeouts;
 
-namespace Rebus.PostgreSql.Tests.Timeouts
+namespace Rebus.Oracle.Tests.Timeouts
 {
-    [TestFixture, Category(TestCategory.Postgres)]
+    [TestFixture, Category(TestCategory.Oracle)]
     public class TestPostgreSqlTimeoutManager : BasicStoreAndRetrieveOperations<PostgreSqlTimeoutManagerFactory>
     {
     }
@@ -15,19 +15,19 @@ namespace Rebus.PostgreSql.Tests.Timeouts
     {
         public PostgreSqlTimeoutManagerFactory()
         {
-            PostgreSqlTestHelper.DropTable("timeouts");
+            OracleTestHelper.DropTable("timeouts");
         }
 
         public ITimeoutManager Create()
         {
-            var postgreSqlTimeoutManager = new OracleTimeoutManager(PostgreSqlTestHelper.ConnectionHelper, "timeouts", new ConsoleLoggerFactory(false));
+            var postgreSqlTimeoutManager = new OracleTimeoutManager(OracleTestHelper.ConnectionHelper, "timeouts", new ConsoleLoggerFactory(false));
             postgreSqlTimeoutManager.EnsureTableIsCreated();
             return postgreSqlTimeoutManager;
         }
 
         public void Cleanup()
         {
-            PostgreSqlTestHelper.DropTable("timeouts");
+            OracleTestHelper.DropTable("timeouts");
         }
 
         public string GetDebugInfo()

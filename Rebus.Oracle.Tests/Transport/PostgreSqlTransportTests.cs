@@ -3,13 +3,13 @@ using System.Collections.Generic;
 using NUnit.Framework;
 using Rebus.Extensions;
 using Rebus.Logging;
-using Rebus.PostgreSql.Transport;
+using Rebus.Oracle.Transport;
 using Rebus.Tests.Contracts;
 using Rebus.Tests.Contracts.Transports;
 using Rebus.Threading.TaskParallelLibrary;
 using Rebus.Transport;
 
-namespace Rebus.PostgreSql.Tests.Transport
+namespace Rebus.Oracle.Tests.Transport
 {
     public class PostgreSqlTransportFactory : ITransportFactory
     {
@@ -18,10 +18,10 @@ namespace Rebus.PostgreSql.Tests.Transport
         readonly List<IDisposable> _disposables = new List<IDisposable>();
 
 
-        [TestFixture, Category(Categories.PostgreSql)]
+        [TestFixture, Category(Categories.Oracle)]
         public class PostgreSqlTransportBasicSendReceive : BasicSendReceive<PostgreSqlTransportFactory> { }
 
-        [TestFixture, Category(Categories.PostgreSql)]
+        [TestFixture, Category(Categories.Oracle)]
         public class PostgreSqlTransportMessageExpiration : MessageExpiration<PostgreSqlTransportFactory> { }
 
 
@@ -31,9 +31,9 @@ namespace Rebus.PostgreSql.Tests.Transport
              _tablesToDrop.Add(tableName);
 
             var consoleLoggerFactory = new ConsoleLoggerFactory(false);
-            var connectionHelper = new OracleConnectionHelper(PostgreSqlTestHelper.ConnectionString);
+            var connectionHelper = new OracleConnectionHelper(OracleTestHelper.ConnectionString);
             var asyncTaskFactory = new TplAsyncTaskFactory(consoleLoggerFactory);
-            var transport = new PostgreSqlTransport(connectionHelper, tableName, null, consoleLoggerFactory, asyncTaskFactory);
+            var transport = new OracleTransport(connectionHelper, tableName, null, consoleLoggerFactory, asyncTaskFactory);
 
             _disposables.Add(transport);
 
@@ -50,9 +50,9 @@ namespace Rebus.PostgreSql.Tests.Transport
             _tablesToDrop.Add(tableName);
 
             var consoleLoggerFactory = new ConsoleLoggerFactory(false);
-            var connectionHelper = new OracleConnectionHelper(PostgreSqlTestHelper.ConnectionString);
+            var connectionHelper = new OracleConnectionHelper(OracleTestHelper.ConnectionString);
             var asyncTaskFactory = new TplAsyncTaskFactory(consoleLoggerFactory);
-            var transport = new PostgreSqlTransport(connectionHelper, tableName, inputQueueAddress, consoleLoggerFactory, asyncTaskFactory);
+            var transport = new OracleTransport(connectionHelper, tableName, inputQueueAddress, consoleLoggerFactory, asyncTaskFactory);
 
             _disposables.Add(transport);
 
@@ -67,7 +67,7 @@ namespace Rebus.PostgreSql.Tests.Transport
             _disposables.ForEach(d => d.Dispose());
             _disposables.Clear();
 
-            _tablesToDrop.ForEach(PostgreSqlTestHelper.DropTable);
+            _tablesToDrop.ForEach(OracleTestHelper.DropTable);
             _tablesToDrop.Clear();
         }
     }

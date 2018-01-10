@@ -6,15 +6,14 @@ using NUnit.Framework;
 using Rebus.Activation;
 using Rebus.Config;
 using Rebus.Logging;
-using Rebus.PostgreSql.Transport;
 using Rebus.Tests.Contracts;
 using Rebus.Tests.Contracts.Utilities;
 
 #pragma warning disable 1998
 
-namespace Rebus.PostgreSql.Tests.Transport
+namespace Rebus.Oracle.Tests.Transport
 {
-    [TestFixture, Category(Categories.PostgreSql)]
+    [TestFixture, Category(Categories.Oracle)]
     public class TestPostgreSqlTransportReceivePerformance : FixtureBase
     {
         BuiltinHandlerActivator _adapter;
@@ -25,13 +24,13 @@ namespace Rebus.PostgreSql.Tests.Transport
 
         protected override void SetUp()
         {
-            PostgreSqlTestHelper.DropTable(TableName);
+            OracleTestHelper.DropTable(TableName);
 
             _adapter = Using(new BuiltinHandlerActivator());
 
             Configure.With(_adapter)
                 .Logging(l => l.ColoredConsole(LogLevel.Warn))
-                .Transport(t => t.UseOracle(PostgreSqlTestHelper.ConnectionString, TableName, QueueName))
+                .Transport(t => PostgreSqlTransportConfigurationExtensions.UseOracle(t, OracleTestHelper.ConnectionString, TableName, QueueName))
                 .Options(o =>
                 {
                     o.SetNumberOfWorkers(0);

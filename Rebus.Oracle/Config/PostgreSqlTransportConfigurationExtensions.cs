@@ -1,13 +1,14 @@
 ﻿using System;
-using Rebus.Config;
 using Rebus.Logging;
+using Rebus.Oracle;
+using Rebus.Oracle.Transport;
 using Rebus.Pipeline;
 using Rebus.Pipeline.Receive;
 using Rebus.Threading;
 using Rebus.Timeouts;
 using Rebus.Transport;
 
-namespace Rebus.PostgreSql.Transport
+namespace Rebus.Config
 {
     /// <summary>
     /// Configuration extensions for the SQL transport
@@ -43,7 +44,7 @@ namespace Rebus.PostgreSql.Transport
                 var rebusLoggerFactory = context.Get<IRebusLoggerFactory>();
                 var asyncTaskFactory = context.Get<IAsyncTaskFactory>();
                 var connectionProvider = connectionProviderFactory(rebusLoggerFactory);
-                var transport = new PostgreSqlTransport(connectionProvider, tableName, inputQueueName, rebusLoggerFactory, asyncTaskFactory);
+                var transport = new OracleTransport(connectionProvider, tableName, inputQueueName, rebusLoggerFactory, asyncTaskFactory);
                 transport.EnsureTableIsCreated();
                 return transport;
             });
