@@ -1,6 +1,6 @@
 # Rebus.Oracle
 
-[![install from nuget](https://img.shields.io/nuget/v/Rebus.PostgreSql.svg?style=flat-square)](https://www.nuget.org/packages/Rebus.PostgreSql)
+[![install from nuget](https://img.shields.io/nuget/v/Rebus.Oracle.svg?style=flat-square)](https://www.nuget.org/packages/Rebus.Oracle)
 
 Provides an Oracle-based transport for [Rebus](https://github.com/rebus-org/Rebus) for
 
