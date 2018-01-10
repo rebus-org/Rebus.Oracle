@@ -222,7 +222,7 @@ VALUES
                     }
 
                     results += affectedRows;
-                    await connection.Complete();
+                    connection.Complete();
 
                     if (affectedRows == 0) break;
                 }
@@ -324,7 +324,7 @@ begin
 END;
 ");
 
-                AsyncHelpers.RunSync(() => connection.Complete());
+                connection.Complete();
             }
         }
 
@@ -381,7 +381,11 @@ END;
                     {
                         var dbConnection = await _connectionHelper.GetConnection();
                         var connectionWrapper = new ConnectionWrapper(dbConnection);
-                        context.OnCommitted(async () => await dbConnection.Complete());
+                        context.OnCommitted(() =>
+                        {
+                            dbConnection.Complete();
+                            return Task.FromResult(0);
+                        });
                         context.OnDisposed(() => connectionWrapper.Dispose());
                         return connectionWrapper;
                     });

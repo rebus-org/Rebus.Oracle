@@ -7,7 +7,6 @@ using Rebus.Oracle.Sagas;
 using Rebus.Oracle.Subscriptions;
 using Rebus.Oracle.Timeouts;
 using Rebus.Sagas;
-using Rebus.Sagas;
 using Rebus.Subscriptions;
 using Rebus.Timeouts;
 

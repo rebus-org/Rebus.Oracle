@@ -1,105 +1,66 @@
 ﻿using System;
 using System.Collections.Concurrent;
+using System.Runtime.CompilerServices;
 using System.Runtime.ExceptionServices;
 using System.Threading;
 using System.Threading.Tasks;
 
 namespace Rebus.Internals
 {
-    static class AsyncHelpers
+
+    /// <summary>
+    /// Used to remove context within an asynchronous method. All further async calls
+    /// after awaiting this class will be performed without a synchronization context. 
+    /// this avoids the need to call ConfigureAwait(false), all the way down the call
+    /// stack. Instead, doing await new SynchronizationContextRemover() at an api entry 
+    /// point should suffice. Previous synchronization context will be restored upon return
+    /// from the method that uses this.
+    /// 
+    /// </summary>
+    public class SynchronizationContextRemover : INotifyCompletion
     {
         /// <summary>
-        /// Executes a task synchronously on the calling thread by installing a temporary synchronization context that queues continuations
-        ///  </summary>
-        public static void RunSync(Func<Task> task)
-        {
-            var currentContext = SynchronizationContext.Current;
-            var customContext = new CustomSynchronizationContext(task);
+        /// Implementation of IsCompleted for awaitable pattern
+        /// If current sync context is already null no need to run OnCompleted....
+        /// </summary>
+        public bool IsCompleted => SynchronizationContext.Current == null;
 
+        /// <summary>
+        /// 
+        /// Implemetnation of OnCompleted for awaitable pattern
+        /// Will run all continuations with no synchronization context.
+        /// After the continuation chain has finished executing it will restore
+        /// the previous context
+        /// </summary>
+        /// <param name="continuation"></param>
+        public void OnCompleted(Action continuation)
+        {
+            var previousContext = SynchronizationContext.Current;
             try
             {
-                SynchronizationContext.SetSynchronizationContext(customContext);
-
-                customContext.Run();
+                SynchronizationContext.SetSynchronizationContext(null);
+                continuation();
             }
             finally
             {
-                SynchronizationContext.SetSynchronizationContext(currentContext);
+                SynchronizationContext.SetSynchronizationContext(previousContext);
             }
         }
 
         /// <summary>
-        /// Synchronization context that can be "pumped" in order to have it execute continuations posted back to it
+        /// GetAwaiter() awaitable pattern 
         /// </summary>
-        class CustomSynchronizationContext : SynchronizationContext
+        /// <returns></returns>
+        public SynchronizationContextRemover GetAwaiter()
         {
-            readonly ConcurrentQueue<Tuple<SendOrPostCallback, object>> _items = new ConcurrentQueue<Tuple<SendOrPostCallback, object>>();
-            readonly AutoResetEvent _workItemsWaiting = new AutoResetEvent(false);
-            readonly Func<Task> _task;
+            return this;
+        }
 
-            ExceptionDispatchInfo _caughtException;
-
-            bool _done;
-
-            public CustomSynchronizationContext(Func<Task> task)
-            {
-                _task = task ?? throw new ArgumentNullException(nameof(task), "Please remember to pass a Task to be executed");
-            }
-
-            public override void Post(SendOrPostCallback function, object state)
-            {
-                _items.Enqueue(Tuple.Create(function, state));
-                _workItemsWaiting.Set();
-            }
-
-            /// <summary>
-            /// Enqueues the function to be executed and executes all resulting continuations until it is completely done
-            /// </summary>
-            public void Run()
-            {
-                Post(async _ =>
-                {
-                    try
-                    {
-                        await _task().ConfigureAwait(false);
-                    }
-                    catch (Exception exception)
-                    {
-                        _caughtException = ExceptionDispatchInfo.Capture(exception);
-                        throw;
-                    }
-                    finally
-                    {
-                        Post(state => _done = true, null);
-                    }
-                }, null);
-
-                while (!_done)
-                {
-                    if (_items.TryDequeue(out var task))
-                    {
-                        task.Item1(task.Item2);
-
-                        if (_caughtException == null) continue;
-
-                        _caughtException.Throw();
-                    }
-                    else
-                    {
-                        _workItemsWaiting.WaitOne();
-                    }
-                }
-            }
-
-            public override void Send(SendOrPostCallback d, object state)
-            {
-                throw new NotSupportedException("Cannot send to same thread");
-            }
-
-            public override SynchronizationContext CreateCopy()
-            {
-                return this;
-            }
+        /// <summary>
+        /// GetResult for awaitable pattern 
+        /// </summary>
+        public void GetResult()
+        {
         }
     }
 }

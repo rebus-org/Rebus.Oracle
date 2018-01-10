@@ -8,7 +8,7 @@ using Oracle.ManagedDataAccess.Client;
 namespace Rebus.Oracle
 {
     /// <summary>
-    /// Wraps an opened <see cref="NpgsqlConnection"/> and makes it easier to work with it
+    /// Wraps an opened <see cref="OracleConnection"/> and makes it easier to work with it
     /// </summary>
     public class OracleDbConnection : IDisposable
     {
@@ -42,7 +42,7 @@ namespace Rebus.Oracle
         /// Completes the transaction
         /// </summary>
 
-        public async Task Complete()
+        public void Complete()
         {
             if (_currentTransaction == null) return;
             using (_currentTransaction)

@@ -57,7 +57,7 @@ INSERT INTO ""{_tableName}"" (""due_time"", ""headers"", ""body"") VALUES (@due_
                     await command.ExecuteNonQueryAsync();
                 }
 
-                await connection.Complete();
+                connection.Complete();
             }
         }
 
@@ -114,7 +114,7 @@ FOR UPDATE;
 
                         return new DueMessagesResult(dueMessages, async () =>
                         {
-                            await connection.Complete();
+                            connection.Complete();
                             connection.Dispose();
                         });
                     }
@@ -168,7 +168,7 @@ CREATE INDEX ON ""{_tableName}"" (""due_time"");
                     command.ExecuteNonQuery();
                 }
 
-                Task.Run(async () => await connection.Complete()).Wait();
+                connection.Complete();
             }
         }
     }

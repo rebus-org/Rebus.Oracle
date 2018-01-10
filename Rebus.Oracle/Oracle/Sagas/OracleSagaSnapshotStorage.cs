@@ -56,7 +56,7 @@ INSERT
                     await command.ExecuteNonQueryAsync();
                 }
                 
-                await connection.Complete();
+                connection.Complete();
             }
         }
 

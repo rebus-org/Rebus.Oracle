@@ -6,7 +6,7 @@ using Oracle.ManagedDataAccess.Client;
 namespace Rebus.Oracle
 {
     /// <summary>
-    /// Helps with managing <see cref="NpgsqlConnection"/>s
+    /// Helps with managing <see cref="OracleConnection"/>s
     /// </summary>
     public class OracleConnectionHelper
     {
