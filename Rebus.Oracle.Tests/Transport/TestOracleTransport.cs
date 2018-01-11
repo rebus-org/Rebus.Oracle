@@ -25,7 +25,7 @@ namespace Rebus.Oracle.Tests.Transport
 
         protected override void SetUp()
         {
-            OracleTestHelper.DropTable(_tableName);
+            OracleTestHelper.DropTableAndSequence(_tableName);
             var consoleLoggerFactory = new ConsoleLoggerFactory(false);
             var asyncTaskFactory = new TplAsyncTaskFactory(consoleLoggerFactory);
             var connectionHelper = new OracleConnectionHelper(OracleTestHelper.ConnectionString);

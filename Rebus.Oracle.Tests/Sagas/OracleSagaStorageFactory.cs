@@ -9,8 +9,8 @@ namespace Rebus.Oracle.Tests.Sagas
     {
         public OracleSagaStorageFactory()
         {
-            OracleTestHelper.DropTable("saga_index");
-            OracleTestHelper.DropTable("saga_data");
+            OracleTestHelper.DropTableAndSequence("saga_index");
+            OracleTestHelper.DropTableAndSequence("saga_data");
         }
 
         public ISagaStorage GetSagaStorage()

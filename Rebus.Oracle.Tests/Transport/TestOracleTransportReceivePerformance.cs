@@ -25,7 +25,7 @@ namespace Rebus.Oracle.Tests.Transport
 
         protected override void SetUp()
         {
-            OracleTestHelper.DropTable(TableName);
+            OracleTestHelper.DropTableAndSequence(TableName);
 
             _adapter = Using(new BuiltinHandlerActivator());
 

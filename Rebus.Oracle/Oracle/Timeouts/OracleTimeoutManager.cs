@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Linq;
+using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using Oracle.ManagedDataAccess.Client;
 using Rebus.Logging;
@@ -47,7 +49,7 @@ namespace Rebus.Oracle.Timeouts
                 {
                     command.CommandText =
                         $@"
-INSERT INTO ""{_tableName}"" (""due_time"", ""headers"", ""body"") VALUES (@due_time, @headers, @body)";
+INSERT INTO {_tableName} (due_time, headers, body) VALUES (:due_time, :headers, :body)";
 
                     command.Parameters.Add(new OracleParameter("due_time", OracleDbType.TimeStampTZ, approximateDueTime.ToUniversalTime().DateTime, ParameterDirection.Input));
                     command.Parameters.Add(new OracleParameter("headers", OracleDbType.Clob, _dictionarySerializer.SerializeToString(headers), ParameterDirection.Input));
@@ -72,21 +74,17 @@ INSERT INTO ""{_tableName}"" (""due_time"", ""headers"", ""body"") VALUES (@due_
                 {
                     command.CommandText =
                         $@"
-
 SELECT
-    ""id"",
-    ""headers"", 
-    ""body"" 
+    id,
+    headers, 
+    body 
 
-FROM ""{_tableName}"" 
+FROM {_tableName} 
 
-WHERE ""due_time"" <= :current_time 
+WHERE due_time <= :current_time 
 
-ORDER BY ""due_time""
-
-FOR UPDATE;
-
-";
+ORDER BY due_time
+FOR UPDATE";
                     command.Parameters.Add(new OracleParameter("current_time", OracleDbType.TimeStampTZ, RebusTime.Now.ToUniversalTime().DateTime, ParameterDirection.Input));
 
                     using (var reader = await command.ExecuteReaderAsync())
@@ -103,8 +101,8 @@ FOR UPDATE;
                             {
                                 using (var deleteCommand = connection.CreateCommand())
                                 {
-                                    deleteCommand.CommandText = $@"DELETE FROM ""{_tableName}"" WHERE ""id"" = :id";
-                                    command.Parameters.Add(new OracleParameter("id", OracleDbType.Int64, id, ParameterDirection.Input));
+                                    deleteCommand.CommandText = $@"DELETE FROM {_tableName} WHERE id = :id";
+                                    deleteCommand.Parameters.Add(new OracleParameter("id", OracleDbType.Int64, id, ParameterDirection.Input));
                                     await deleteCommand.ExecuteNonQueryAsync();
                                 }
                             }));
@@ -134,34 +132,52 @@ FOR UPDATE;
             {
                 var tableNames = connection.GetTableNames();
 
-                if (tableNames.Contains(_tableName))
+                if (tableNames.Contains(_tableName, StringComparer.OrdinalIgnoreCase))
                 {
                     return;
                 }
 
                 _log.Info("Table {tableName} does not exist - it will be created now", _tableName);
-
                 using (var command = connection.CreateCommand())
                 {
                     command.CommandText =
                         $@"
-                        CREATE TABLE ""{_tableName}"" (
-                            ""id""  NUMBER NOT NULL,
-                            ""due_time"" TIMESTAMP WITH TIME ZONE NOT NULL,
-                            ""headers"" CLOB NULL,
-                            ""body""  BLOB NULL,
-                            PRIMARY KEY (""id"")
-                        );
-                        ";
+                        CREATE TABLE {_tableName} (
+                            id  NUMBER(10) NOT NULL,
+                            due_time TIMESTAMP WITH TIME ZONE NOT NULL,
+                            headers CLOB,
+                            body  BLOB,
+                            CONSTRAINT {_tableName}_pk PRIMARY KEY(id)
+                         )";
 
+                    command.ExecuteNonQuery();
+                }
+                using (var command = connection.CreateCommand())
+                {
+                    command.CommandText =
+                        $@"CREATE SEQUENCE {_tableName}_SEQ";
                     command.ExecuteNonQuery();
                 }
 
                 using (var command = connection.CreateCommand())
                 {
-                    command.CommandText = $@"
-                        CREATE INDEX ON ""{_tableName}"" (""due_time"");
+                    command.CommandText =
+                        $@"
+                        CREATE OR REPLACE TRIGGER {_tableName}_on_insert
+                             BEFORE INSERT ON  {_tableName}
+                             FOR EACH ROW
+                        BEGIN
+                            if :new.Id is null then
+                              :new.id := {_tableName}_seq.nextval;
+                            END IF;
+                        END;
                         ";
+                    command.ExecuteNonQuery();
+                }
+                using (var command = connection.CreateCommand())
+                {
+                    command.CommandText = $@"
+                        CREATE INDEX {_tableName}_due_idx ON {_tableName} (due_time)";
 
                     command.ExecuteNonQuery();
                 }

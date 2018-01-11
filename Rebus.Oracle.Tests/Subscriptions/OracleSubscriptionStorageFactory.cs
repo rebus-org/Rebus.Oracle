@@ -21,7 +21,7 @@ namespace Rebus.Oracle.Tests.Subscriptions
 
         public void Cleanup()
         {
-            OracleTestHelper.DropTable("subscriptions");
+            OracleTestHelper.DropTableAndSequence("subscriptions");
         }
     }
 }

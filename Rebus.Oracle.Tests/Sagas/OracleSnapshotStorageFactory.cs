@@ -13,7 +13,7 @@ namespace Rebus.Oracle.Tests.Sagas
 
         public OracleSnapshotStorageFactory()
         {
-            OracleTestHelper.DropTable(TableName);
+            OracleTestHelper.DropTableAndSequence(TableName);
         }
 
         public ISagaSnapshotStorage Create()

@@ -67,7 +67,7 @@ namespace Rebus.Oracle.Tests.Transport
             _disposables.ForEach(d => d.Dispose());
             _disposables.Clear();
 
-            _tablesToDrop.ForEach(OracleTestHelper.DropTable);
+            _tablesToDrop.ForEach(OracleTestHelper.DropTableAndSequence);
             _tablesToDrop.Clear();
         }
     }

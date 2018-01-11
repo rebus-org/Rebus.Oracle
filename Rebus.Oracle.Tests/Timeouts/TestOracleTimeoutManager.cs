@@ -15,7 +15,7 @@ namespace Rebus.Oracle.Tests.Timeouts
     {
         public OracleTimeoutManagerFactory()
         {
-            OracleTestHelper.DropTable("timeouts");
+            OracleTestHelper.DropTableAndSequence("timeouts");
         }
 
         public ITimeoutManager Create()
@@ -27,7 +27,7 @@ namespace Rebus.Oracle.Tests.Timeouts
 
         public void Cleanup()
         {
-            OracleTestHelper.DropTable("timeouts");
+            OracleTestHelper.DropTableAndSequence("timeouts");
         }
 
         public string GetDebugInfo()
