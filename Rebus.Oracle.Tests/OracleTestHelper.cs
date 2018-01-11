@@ -1,12 +1,13 @@
 ﻿using System;
 using Npgsql;
+using Oracle.ManagedDataAccess.Client;
 using Rebus.Tests.Contracts;
 
 namespace Rebus.Oracle.Tests
 {
     public class OracleTestHelper
     {
-        const string TableDoesNotExist = "42P01";
+        const int TableDoesNotExist = 942;
         static readonly OracleConnectionHelper OracleConnectionHelper = new OracleConnectionHelper(ConnectionString);
 
         public static string DatabaseName => $"rebus2_test_{TestConfig.Suffix}".TrimEnd('_');
@@ -21,15 +22,15 @@ namespace Rebus.Oracle.Tests
             {
                 using (var comand = connection.CreateCommand())
                 {
-                    comand.CommandText = $@"drop table ""{tableName}"";";
+                    comand.CommandText = $@"drop table ""{tableName}""";
 
                     try
                     {
                         comand.ExecuteNonQuery();
 
-                        Console.WriteLine("Dropped postgres table '{0}'", tableName);
+                        Console.WriteLine("Dropped oracle table '{0}'", tableName);
                     }
-                    catch (PostgresException exception) when (exception.SqlState == TableDoesNotExist)
+                    catch (OracleException exception) when (exception.Number == TableDoesNotExist)
                     {
                     }
                 }
@@ -40,8 +41,8 @@ namespace Rebus.Oracle.Tests
 
         static string GetConnectionStringForDatabase(string databaseName)
         {
-            return Environment.GetEnvironmentVariable("REBUS_POSTGRES")
-                   ?? $"server=localhost; database={databaseName}; user id=postgres; password=postgres;maximum pool size=30;";
+            return Environment.GetEnvironmentVariable("REBUS_ORACLE")
+                   ?? $"User Id={databaseName}; Password=rebus; Data Source=localhost/xe;";
         }
     }
 }
