@@ -10,7 +10,7 @@ using Rebus.Subscriptions;
 namespace Rebus.Oracle.Subscriptions
 {
     /// <summary>
-    /// Implementation of <see cref="ISubscriptionStorage"/> that uses Postgres to do its thing
+    /// Implementation of <see cref="ISubscriptionStorage"/> that uses Oracle to do its thing
     /// </summary>
     public class OracleSubscriptionStorage : ISubscriptionStorage
     {
@@ -27,11 +27,9 @@ namespace Rebus.Oracle.Subscriptions
         /// </summary>
         public OracleSubscriptionStorage(OracleConnectionHelper connectionHelper, string tableName, bool isCentralized, IRebusLoggerFactory rebusLoggerFactory)
         {
-            if (connectionHelper == null) throw new ArgumentNullException(nameof(connectionHelper));
-            if (tableName == null) throw new ArgumentNullException(nameof(tableName));
             if (rebusLoggerFactory == null) throw new ArgumentNullException(nameof(rebusLoggerFactory));
-            _connectionHelper = connectionHelper;
-            _tableName = tableName;
+            _connectionHelper = connectionHelper ?? throw new ArgumentNullException(nameof(connectionHelper));
+            _tableName = tableName ?? throw new ArgumentNullException(nameof(tableName));
             IsCentralized = isCentralized;
             _log = rebusLoggerFactory.GetLogger<OracleSubscriptionStorage>();
         }

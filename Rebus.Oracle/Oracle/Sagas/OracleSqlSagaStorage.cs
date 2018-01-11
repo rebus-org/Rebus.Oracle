@@ -32,13 +32,10 @@ namespace Rebus.Oracle.Sagas
         /// </summary>
         public OracleSqlSagaStorage(OracleConnectionHelper connectionHelper, string dataTableName, string indexTableName, IRebusLoggerFactory rebusLoggerFactory)
         {
-            if (connectionHelper == null) throw new ArgumentNullException(nameof(connectionHelper));
-            if (dataTableName == null) throw new ArgumentNullException(nameof(dataTableName));
-            if (indexTableName == null) throw new ArgumentNullException(nameof(indexTableName));
             if (rebusLoggerFactory == null) throw new ArgumentNullException(nameof(rebusLoggerFactory));
-            _connectionHelper = connectionHelper;
-            _dataTableName = dataTableName;
-            _indexTableName = indexTableName;
+            _connectionHelper = connectionHelper ?? throw new ArgumentNullException(nameof(connectionHelper));
+            _dataTableName = dataTableName ?? throw new ArgumentNullException(nameof(dataTableName));
+            _indexTableName = indexTableName ?? throw new ArgumentNullException(nameof(indexTableName));
             _log = rebusLoggerFactory.GetLogger<OracleSqlSagaStorage>();
         }
 
@@ -365,12 +362,11 @@ DELETE
                 var inserts = parameters
                     .Select(a =>
                         $@"
+                        INSERT
+                            INTO ""{_indexTableName}"" (saga_type, key, value, saga_id) 
+                            VALUES (:saga_type, {a.PropertyNameParameter}, {a.PropertyValueParameter}, :saga_id)
 
-INSERT
-    INTO ""{_indexTableName}"" (""saga_type"", ""key"", ""value"", ""saga_id"") 
-    VALUES (:saga_type, {a.PropertyNameParameter}, {a.PropertyValueParameter}, :saga_id)
-
-");
+                        ");
 
                 var sql = string.Join(";" + Environment.NewLine, inserts);
 

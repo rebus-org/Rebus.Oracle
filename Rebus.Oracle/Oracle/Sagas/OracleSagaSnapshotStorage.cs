@@ -24,10 +24,8 @@ namespace Rebus.Oracle.Sagas
         /// </summary>
         public OracleSagaSnapshotStorage(OracleConnectionHelper connectionHelper, string tableName)
         {
-            if (connectionHelper == null) throw new ArgumentNullException(nameof(connectionHelper));
-            if (tableName == null) throw new ArgumentNullException(nameof(tableName));
-            _connectionHelper = connectionHelper;
-            _tableName = tableName;
+            _connectionHelper = connectionHelper ?? throw new ArgumentNullException(nameof(connectionHelper));
+            _tableName = tableName ?? throw new ArgumentNullException(nameof(tableName));
         }
 
         /// <summary>
@@ -41,12 +39,11 @@ namespace Rebus.Oracle.Sagas
                 {
                     command.CommandText =
                         $@"
+                        INSERT
+                            INTO ""{_tableName}"" (""id"", ""revision"", ""data"", ""metadata"")
+                            VALUES (:id, :revision, :data, :metadata);
 
-INSERT
-    INTO ""{_tableName}"" (""id"", ""revision"", ""data"", ""metadata"")
-    VALUES (:id, :revision, :data, :metadata);
-
-";
+                        ";
                     command.Parameters.Add("id", OracleDbType.Raw).Value = sagaData.Id;
                     command.Parameters.Add("revision", OracleDbType.Int64).Value = sagaData.Revision;
                     command.Parameters.Add("data", OracleDbType.Blob).Value = _objectSerializer.Serialize(sagaData);
@@ -75,14 +72,14 @@ INSERT
                 {
                     command.CommandText =
                         $@"
-CREATE TABLE ""{_tableName}"" (
-	""id"" UUID NOT NULL,
-	""revision"" INTEGER NOT NULL,
-	""metadata"" JSONB NOT NULL,
-	""data"" BYTEA NOT NULL,
-	PRIMARY KEY (""id"", ""revision"")
-);
-";
+                        CREATE TABLE ""{_tableName}"" (
+                            ""id"" UUID NOT NULL,
+                            ""revision"" INTEGER NOT NULL,
+                            ""metadata"" JSONB NOT NULL,
+                            ""data"" BYTEA NOT NULL,
+                            PRIMARY KEY (""id"", ""revision"")
+                        );
+                        ";
 
                     command.ExecuteNonQuery();
                 }

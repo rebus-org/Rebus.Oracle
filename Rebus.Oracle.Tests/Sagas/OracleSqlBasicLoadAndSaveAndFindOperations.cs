@@ -4,7 +4,5 @@ using Rebus.Tests.Contracts.Sagas;
 namespace Rebus.Oracle.Tests.Sagas
 {
     [TestFixture, Category(TestCategory.Oracle)]
-    public class SagaIntegrationTests : SagaIntegrationTests<OracleSagaStorageFactory>
-    {
-    }
+    public class OracleSqlBasicLoadAndSaveAndFindOperations : BasicLoadAndSaveAndFindOperations<OracleSagaStorageFactory> { }
 }

@@ -2,6 +2,6 @@
 {
     internal class TestCategory
     {
-        public const string Oracle = "postgresql";
+        public const string Oracle = "oracle";
     }
 }

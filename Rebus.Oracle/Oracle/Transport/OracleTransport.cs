@@ -114,24 +114,24 @@ namespace Rebus.Oracle.Transport
             using (var command = connection.Connection.CreateCommand())
             {
                 command.CommandText = $@"
-INSERT INTO {_tableName}
-(
-    recipient,
-    headers,
-    body,
-    priority,
-    visible,
-    expiration
-)
-VALUES
-(
-    :recipient,
-    :headers,
-    :body,
-    :priority,
-    systimestamp(6) + :visible,
-    systimestamp(6) + :ttlseconds
-)";
+                    INSERT INTO {_tableName}
+                    (
+                        recipient,
+                        headers,
+                        body,
+                        priority,
+                        visible,
+                        expiration
+                    )
+                    VALUES
+                    (
+                        :recipient,
+                        :headers,
+                        :body,
+                        :priority,
+                        systimestamp(6) + :visible,
+                        systimestamp(6) + :ttlseconds
+                    )";
 
                 var headers = message.Headers.Clone();
 
@@ -164,7 +164,7 @@ VALUES
 
                 using (var selectCommand = connection.Connection.CreateCommand())
                 {
-                    selectCommand.CommandText = "rebus_dequeue_message";
+                    selectCommand.CommandText = $"rebus_dequeue_{_tableName}";
                     selectCommand.CommandType = CommandType.StoredProcedure;
                     selectCommand.Parameters.Add(new OracleParameter("recipient", OracleDbType.Varchar2, _inputQueueName, ParameterDirection.Input));
                     selectCommand.Parameters.Add(new OracleParameter("output", OracleDbType.RefCursor ,ParameterDirection.Output));
@@ -284,8 +284,7 @@ CREATE TABLE {_tableName}
 ----
 ALTER TABLE {_tableName} ADD CONSTRAINT {_tableName}_pk PRIMARY KEY(recipient, priority, id)
 ----
-CREATE SEQUENCE {_tableName}_SEQ;
-
+CREATE SEQUENCE {_tableName}_SEQ
 ----
 CREATE OR REPLACE TRIGGER {_tableName}_on_insert
      BEFORE INSERT ON  {_tableName}
@@ -303,7 +302,7 @@ CREATE INDEX idx_receive_{_tableName} ON {_tableName}
     visible ASC
 )
 ----
-create or replace PROCEDURE  rebus_dequeue_message(myRecipient IN varchar, output OUT SYS_REFCURSOR ) AS
+create or replace PROCEDURE  rebus_dequeue_{_tableName}(recipient IN varchar, output OUT SYS_REFCURSOR ) AS
   messageId number;
   readCursor SYS_REFCURSOR; 
 begin
@@ -311,7 +310,7 @@ begin
     open readCursor for 
     SELECT id
     FROM {_tableName}
-    WHERE recipient = myRecipient
+    WHERE recipient = recipient
             and visible < current_timestamp(6)
             and expiration > current_timestamp(6)          
     ORDER BY priority ASC, id ASC

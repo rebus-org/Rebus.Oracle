@@ -31,7 +31,7 @@ namespace Rebus.Oracle.Tests.Transport
 
             Configure.With(_adapter)
                 .Logging(l => l.ColoredConsole(LogLevel.Warn))
-                .Transport(t => OracleTransportConfigurationExtensions.UseOracle(t, OracleTestHelper.ConnectionString, TableName, QueueName))
+                .Transport(t => t.UseOracle(OracleTestHelper.ConnectionString, TableName, QueueName))
                 .Options(o =>
                 {
                     o.SetNumberOfWorkers(0);

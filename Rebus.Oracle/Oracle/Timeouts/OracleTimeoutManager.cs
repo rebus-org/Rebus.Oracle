@@ -30,11 +30,9 @@ namespace Rebus.Oracle.Timeouts
         /// </summary>
         public OracleTimeoutManager(OracleConnectionHelper connectionHelper, string tableName, IRebusLoggerFactory rebusLoggerFactory)
         {
-            if (connectionHelper == null) throw new ArgumentNullException(nameof(connectionHelper));
-            if (tableName == null) throw new ArgumentNullException(nameof(tableName));
             if (rebusLoggerFactory == null) throw new ArgumentNullException(nameof(rebusLoggerFactory));
-            _connectionHelper = connectionHelper;
-            _tableName = tableName;
+            _connectionHelper = connectionHelper ?? throw new ArgumentNullException(nameof(connectionHelper));
+            _tableName = tableName ?? throw new ArgumentNullException(nameof(tableName));
             _log = rebusLoggerFactory.GetLogger<OracleTimeoutManager>();
         }
 
@@ -147,14 +145,14 @@ FOR UPDATE;
                 {
                     command.CommandText =
                         $@"
-CREATE TABLE ""{_tableName}"" (
-    ""id""  NUMBER NOT NULL,
-    ""due_time"" TIMESTAMP WITH TIME ZONE NOT NULL,
-    ""headers"" CLOB NULL,
-    ""body""  BLOB NULL,
-    PRIMARY KEY (""id"")
-);
-";
+                        CREATE TABLE ""{_tableName}"" (
+                            ""id""  NUMBER NOT NULL,
+                            ""due_time"" TIMESTAMP WITH TIME ZONE NOT NULL,
+                            ""headers"" CLOB NULL,
+                            ""body""  BLOB NULL,
+                            PRIMARY KEY (""id"")
+                        );
+                        ";
 
                     command.ExecuteNonQuery();
                 }
@@ -162,8 +160,8 @@ CREATE TABLE ""{_tableName}"" (
                 using (var command = connection.CreateCommand())
                 {
                     command.CommandText = $@"
-CREATE INDEX ON ""{_tableName}"" (""due_time"");
-";
+                        CREATE INDEX ON ""{_tableName}"" (""due_time"");
+                        ";
 
                     command.ExecuteNonQuery();
                 }

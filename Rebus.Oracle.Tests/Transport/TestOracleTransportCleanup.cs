@@ -33,7 +33,7 @@ namespace Rebus.Oracle.Tests.Transport
 
                 Configure.With(_activator)
                     .Logging(l => l.Use(_loggerFactory))
-                    .Transport(t => OracleTransportConfigurationExtensions.UseOracle(t, OracleTestHelper.ConnectionString, "Messages", queueName))
+                    .Transport(t => t.UseOracle(OracleTestHelper.ConnectionString, "Messages", queueName))
                     .Start();
             }
 

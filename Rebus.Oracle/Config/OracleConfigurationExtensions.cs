@@ -13,14 +13,14 @@ using Rebus.Timeouts;
 namespace Rebus.Config
 {
     /// <summary>
-    /// Configuration extensions for Postgres persistence
+    /// Configuration extensions for Oracle persistence
     /// </summary>
     public static class OracleConfigurationExtensions
     {
         /// <summary>
         /// Configures Rebus to use Oracle to store saga data snapshots, using the specified table to store the data
         /// </summary>
-        public static void StoreInPostgres(this StandardConfigurer<ISagaSnapshotStorage> configurer,
+        public static void StoreInOracle(this StandardConfigurer<ISagaSnapshotStorage> configurer,
             string connectionString, string tableName, bool automaticallyCreateTables = true, 
             Action<OracleConnection> additionalConnectionSetup = null)
         {
@@ -40,7 +40,7 @@ namespace Rebus.Config
         /// <summary>
         /// Configures Rebus to use Oracle to store sagas, using the tables specified to store data and indexed properties respectively.
         /// </summary>
-        public static void StoreInPostgres(this StandardConfigurer<ISagaStorage> configurer,
+        public static void StoreInOracle(this StandardConfigurer<ISagaStorage> configurer,
             string connectionString, string dataTableName, string indexTableName,
             bool automaticallyCreateTables = true, Action<OracleConnection> additionalConnectionSetup = null)
         {
@@ -61,7 +61,7 @@ namespace Rebus.Config
         /// <summary>
         /// Configures Rebus to use Oracle to store timeouts.
         /// </summary>
-        public static void StoreInPostgres(this StandardConfigurer<ITimeoutManager> configurer, string connectionString, string tableName, 
+        public static void StoreInOracle(this StandardConfigurer<ITimeoutManager> configurer, string connectionString, string tableName, 
             bool automaticallyCreateTables = true, Action<OracleConnection> additionalConnectionSetup = null)
         {
             configurer.Register(c =>
@@ -83,7 +83,7 @@ namespace Rebus.Config
         /// subscribing and unsubscribing by manipulating the subscription directly from the subscriber or just let it default to false to preserve the
         /// default behavior.
         /// </summary>
-        public static void StoreInPostgres(this StandardConfigurer<ISubscriptionStorage> configurer,
+        public static void StoreInOracle(this StandardConfigurer<ISubscriptionStorage> configurer,
             string connectionString, string tableName, bool isCentralized = false, bool automaticallyCreateTables = true, Action<OracleConnection> additionalConnectionSetup = null)
         {
             configurer.Register(c =>
