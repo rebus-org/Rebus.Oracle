@@ -51,13 +51,11 @@ namespace Rebus.Oracle.Subscriptions
                 {
                     command.CommandText =
                         $@"
-CREATE TABLE ""{_tableName
-                            }"" (
-	""topic"" VARCHAR(200) NOT NULL,
-	""address"" VARCHAR(200) NOT NULL,
-	PRIMARY KEY (""topic"", ""address"")
-);
-";
+CREATE TABLE {_tableName} (
+	topic VARCHAR(200) NOT NULL,
+	address VARCHAR(200) NOT NULL,
+	PRIMARY KEY (topic,address)
+)";
                     command.ExecuteNonQuery();
                 }
 
@@ -73,7 +71,7 @@ CREATE TABLE ""{_tableName
             using (var connection = await _connectionHelper.GetConnection())
             using (var command = connection.CreateCommand())
             {
-                command.CommandText = $@"select ""address"" from ""{_tableName}"" where ""topic"" = :topic";
+                command.CommandText = $@"select address from {_tableName} where topic = :topic";
 
                 command.Parameters.Add(new OracleParameter("topic", OracleDbType.Varchar2, topic, ParameterDirection.Input));
 
@@ -100,7 +98,7 @@ CREATE TABLE ""{_tableName
             using (var command = connection.CreateCommand())
             {
                 command.CommandText =
-                    $@"insert into ""{_tableName}"" (""topic"", ""address"") values (:topic, :address)";
+                    $@"insert into {_tableName} (topic, address) values (:topic, :address)";
 
                 command.Parameters.Add(new OracleParameter("topic", OracleDbType.Varchar2, topic, ParameterDirection.Input));
                 command.Parameters.Add(new OracleParameter("address", OracleDbType.Varchar2, subscriberAddress, ParameterDirection.Input));
@@ -127,7 +125,7 @@ CREATE TABLE ""{_tableName
             using (var command = connection.CreateCommand())
             {
                 command.CommandText =
-                    $@"delete from ""{_tableName}"" where ""topic"" = @topic and ""address"" = :address;";
+                    $@"delete from {_tableName} where topic = :topic and address = :address";
 
                 command.Parameters.Add(new OracleParameter("topic", OracleDbType.Varchar2, topic, ParameterDirection.Input));
                 command.Parameters.Add(new OracleParameter("address", OracleDbType.Varchar2, subscriberAddress, ParameterDirection.Input));
