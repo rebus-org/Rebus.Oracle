@@ -178,7 +178,6 @@ namespace Rebus.Oracle.Transport
                         using (var reader = (selectCommand.Parameters["output"].Value as OracleRefCursor).GetDataReader()){
                             if (!await reader.ReadAsync(cancellationToken))
                             {
-                                _log.Warn("Returned no messages from query");
                                 return null;
                             }
 
@@ -279,8 +278,8 @@ CREATE TABLE {_tableName}
 	id NUMBER(20) NOT NULL,
 	recipient VARCHAR2(255) NOT NULL,
 	priority NUMBER(20) NOT NULL,
-    expiration timestamp with time zone NOT NULL,
-    visible timestamp with time zone NOT NULL,
+    expiration timestamp(7) with time zone NOT NULL,
+    visible timestamp(7) with time zone NOT NULL,
 	headers blob NOT NULL,
 	body blob NOT NULL
 )

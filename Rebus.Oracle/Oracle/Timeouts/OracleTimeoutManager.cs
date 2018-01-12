@@ -145,7 +145,7 @@ namespace Rebus.Oracle.Timeouts
                         $@"
                         CREATE TABLE {_tableName} (
                             id  NUMBER(10) NOT NULL,
-                            due_time TIMESTAMP WITH TIME ZONE NOT NULL,
+                            due_time TIMESTAMP(7) WITH TIME ZONE NOT NULL,
                             headers CLOB,
                             body  BLOB,
                             CONSTRAINT {_tableName}_pk PRIMARY KEY(id)
