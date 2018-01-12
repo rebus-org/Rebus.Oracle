@@ -34,7 +34,6 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\Rebus.Oracle\Rebus.Oracle.csproj" />
-    <PackageReference Include="npgsql" Version="3.2.2" />
     <PackageReference Include="nunit" Version="3.7.1" />
     <PackageReference Include="rebus" Version="4.0.0" />
     <PackageReference Include="rebus.tests.contracts" Version="4.0.0" />

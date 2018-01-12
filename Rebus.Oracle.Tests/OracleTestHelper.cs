@@ -1,5 +1,4 @@
 ﻿using System;
-using Npgsql;
 using Oracle.ManagedDataAccess.Client;
 using Rebus.Tests.Contracts;
 
