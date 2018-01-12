@@ -1,6 +1,7 @@
 ﻿// ReSharper disable once RedundantUsingDirective (because .NET Core)
 using System;
 using System.Collections.Generic;
+using System.Data;
 using System.Linq;
 using Rebus.Extensions;
 using System.Reflection;
@@ -30,7 +31,8 @@ namespace Rebus.Oracle.Sagas
         /// <summary>
         /// Constructs the saga storage
         /// </summary>
-        public OracleSqlSagaStorage(OracleConnectionHelper connectionHelper, string dataTableName, string indexTableName, IRebusLoggerFactory rebusLoggerFactory)
+        public OracleSqlSagaStorage(OracleConnectionHelper connectionHelper, string dataTableName,
+            string indexTableName, IRebusLoggerFactory rebusLoggerFactory)
         {
             if (rebusLoggerFactory == null) throw new ArgumentNullException(nameof(rebusLoggerFactory));
             _connectionHelper = connectionHelper ?? throw new ArgumentNullException(nameof(connectionHelper));
@@ -69,19 +71,20 @@ namespace Rebus.Oracle.Sagas
                         $"The saga data table '{_dataTableName}' does not exist, so the automatic saga schema generation tried to run - but there was already a table named '{_indexTableName}', which was supposed to be created as the index table");
                 }
 
-                _log.Info("Saga tables {tableName} (data) and {tableName} (index) do not exist - they will be created now", _dataTableName, _indexTableName);
+                _log.Info(
+                    "Saga tables {tableName} (data) and {tableName} (index) do not exist - they will be created now",
+                    _dataTableName, _indexTableName);
 
                 using (var command = connection.CreateCommand())
                 {
                     command.CommandText =
                         $@"
-CREATE TABLE ""{_dataTableName}"" (
-	""id"" UUID NOT NULL,
-	""revision"" INTEGER NOT NULL,
-	""data"" BYTEA NOT NULL,
-	PRIMARY KEY (""id"")
-);
-";
+                        CREATE TABLE {_dataTableName} (
+                            id RAW(16) NOT NULL,
+                            revision NUMBER(10) NOT NULL,
+                            data BLOB NOT NULL,
+                            CONSTRAINT {_dataTableName}_pk PRIMARY KEY(id)
+                        )";
 
                     command.ExecuteNonQuery();
                 }
@@ -89,17 +92,18 @@ CREATE TABLE ""{_dataTableName}"" (
                 using (var command = connection.CreateCommand())
                 {
                     command.CommandText = $@"
-CREATE TABLE ""{_indexTableName}"" (
-	""saga_type"" TEXT NOT NULL,
-	""key"" TEXT NOT NULL,
-	""value"" TEXT NOT NULL,
-	""saga_id"" UUID NOT NULL,
-	PRIMARY KEY (""key"", ""value"", ""saga_type"")
-);
-
-CREATE INDEX ON ""{_indexTableName}"" (""saga_id"");
-";
-
+                        CREATE TABLE {_indexTableName} (
+                            saga_type NVARCHAR2(500) NOT NULL,
+                            key NVARCHAR2(500) NOT NULL,
+                            value NVARCHAR2(2000) NOT NULL,
+                            saga_id RAW(16) NOT NULL,
+                            CONSTRAINT {_indexTableName}_pk PRIMARY KEY(key, value, saga_type)
+                        )";
+                    command.ExecuteNonQuery();
+                }
+                using (var command = connection.CreateCommand())
+                {
+                    command.CommandText = $@"CREATE INDEX {_indexTableName}_IDX ON {_indexTableName} (saga_id)";
                     command.ExecuteNonQuery();
                 }
 
@@ -117,37 +121,38 @@ CREATE INDEX ON ""{_indexTableName}"" (""saga_id"");
             {
                 using (var command = connection.CreateCommand())
                 {
+                    command.InitialLOBFetchSize=-1;
                     if (propertyName == IdPropertyName)
                     {
                         command.CommandText = $@"
-SELECT s.""data"" 
-    FROM ""{_dataTableName}"" s 
-    WHERE s.""id"" = :id
-";
-                        command.Parameters.Add("id", OracleDbType.Raw).Value = ToGuid(propertyValue);
+                            SELECT s.data 
+                                FROM {_dataTableName} s 
+                                WHERE s.id = :id 
+                            ";
+                        command.Parameters.Add("id", OracleDbType.Raw).Value = ToGuid(propertyValue).ToByteArray();
                     }
                     else
                     {
-                        command.CommandText =
-                            $@"
-SELECT s.""data"" 
-    FROM ""{_dataTableName}"" s
-    JOIN ""{_indexTableName}"" i on s.id = i.saga_id 
-    WHERE i.""saga_type"" = :saga_type AND i.""key"" = :key AND i.value = :value;
-";
-
-                        command.Parameters.Add("key", OracleDbType.Varchar2).Value = propertyName;
-                        command.Parameters.Add("saga_type", OracleDbType.Varchar2).Value = GetSagaTypeName(sagaDataType);
-                        command.Parameters.Add("value", OracleDbType.Varchar2).Value = (propertyValue ?? "").ToString();
+                        command.CommandText = $@"
+                            SELECT s.data
+                                FROM Saga_Data s
+                                JOIN Saga_Index i on s.id = i.saga_id 
+                                WHERE i.saga_type = :saga_type AND  i.key = :key AND i.value = :value
+                            ";
+                        command.BindByName = true;
+                        command.Parameters.Add(new OracleParameter("key", OracleDbType.NVarchar2, propertyName, ParameterDirection.Input));
+                        command.Parameters.Add(new OracleParameter("saga_type", OracleDbType.NVarchar2, GetSagaTypeName(sagaDataType), ParameterDirection.Input));
+                        command.Parameters.Add(new OracleParameter("value", OracleDbType.NVarchar2, (propertyValue ?? "").ToString(), ParameterDirection.Input));
                     }
 
-                    var data = (byte[])command.ExecuteScalar();
+                    var data = (byte[]) command.ExecuteScalar();
+                    //var data = command.ExecuteScalar();
 
                     if (data == null) return null;
 
                     try
                     {
-                        var sagaData = (ISagaData)_objectSerializer.Deserialize(data);
+                        var sagaData = (ISagaData) _objectSerializer.Deserialize(data);
 
                         if (!sagaDataType.IsInstanceOfType(sagaData))
                         {
@@ -158,7 +163,8 @@ SELECT s.""data""
                     }
                     catch (Exception exception)
                     {
-                        var message = $"An error occurred while attempting to deserialize '{data}' into a {sagaDataType}";
+                        var message =
+                            $"An error occurred while attempting to deserialize '{data}' into a {sagaDataType}";
 
                         throw new RebusApplicationException(exception, message);
                     }
@@ -170,9 +176,9 @@ SELECT s.""data""
             }
         }
 
-        static object ToGuid(object propertyValue)
+        static Guid ToGuid(object propertyValue)
         {
-            return Convert.ChangeType(propertyValue, typeof(Guid));
+            return (Guid) Convert.ChangeType(propertyValue, typeof(Guid));
         }
 
         /// <summary>
@@ -183,12 +189,14 @@ SELECT s.""data""
         {
             if (sagaData.Id == Guid.Empty)
             {
-                throw new InvalidOperationException($"Saga data {sagaData.GetType()} has an uninitialized Id property!");
+                throw new InvalidOperationException(
+                    $"Saga data {sagaData.GetType()} has an uninitialized Id property!");
             }
 
             if (sagaData.Revision != 0)
             {
-                throw new InvalidOperationException($"Attempted to insert saga data with ID {sagaData.Id} and revision {sagaData.Revision}, but revision must be 0 on first insert!");
+                throw new InvalidOperationException(
+                    $"Attempted to insert saga data with ID {sagaData.Id} and revision {sagaData.Revision}, but revision must be 0 on first insert!");
             }
 
             using (var connection = await _connectionHelper.GetConnection())
@@ -201,12 +209,10 @@ SELECT s.""data""
 
                     command.CommandText =
                         $@"
-
-INSERT 
-    INTO ""{_dataTableName}"" (""id"", ""revision"", ""data"") 
-    VALUES (:id, :revision, :data);
-
-";
+                        INSERT 
+                            INTO {_dataTableName} (id, revision, data) 
+                            VALUES (:id, :revision, :data)
+                        ";
 
                     try
                     {
@@ -214,7 +220,8 @@ INSERT
                     }
                     catch (OracleException exception)
                     {
-                        throw new ConcurrencyException(exception, $"Saga data {sagaData.GetType()} with ID {sagaData.Id} in table {_dataTableName} could not be inserted!");
+                        throw new ConcurrencyException(exception,
+                            $"Saga data {sagaData.GetType()} with ID {sagaData.Id} in table {_dataTableName} could not be inserted!");
                     }
                 }
 
@@ -247,11 +254,7 @@ INSERT
                 // first, delete existing index
                 using (var command = connection.CreateCommand())
                 {
-                    command.CommandText = $@"
-
-DELETE FROM ""{_indexTableName}"" WHERE ""saga_id"" = @id;
-
-";
+                    command.CommandText = $@"DELETE FROM {_indexTableName} WHERE saga_id = :id";
                     command.Parameters.Add("id", OracleDbType.Raw).Value = sagaData.Id;
                     await command.ExecuteNonQueryAsync();
                 }
@@ -259,25 +262,25 @@ DELETE FROM ""{_indexTableName}"" WHERE ""saga_id"" = @id;
                 // next, update or insert the saga
                 using (var command = connection.CreateCommand())
                 {
-                    command.Parameters.Add("id", OracleDbType.Raw).Value = sagaData.Id;
+                    command.Parameters.Add("id", OracleDbType.Raw).Value = sagaData.Id.ToByteArray();
                     command.Parameters.Add("current_revision", OracleDbType.Int64).Value = revisionToUpdate;
                     command.Parameters.Add("next_revision", OracleDbType.Int64).Value = nextRevision;
                     command.Parameters.Add("data", OracleDbType.Raw).Value = _objectSerializer.Serialize(sagaData);
+                    command.BindByName = true;
 
                     command.CommandText =
                         $@"
-
-UPDATE ""{_dataTableName}"" 
-    SET ""data"" = :data, ""revision"" = :next_revision 
-    WHERE ""id"" = :id AND ""revision"" = :current_revision;
-
-";
+                        UPDATE {_dataTableName} 
+                            SET data = :data, revision = :next_revision 
+                            WHERE id = :id AND revision = :current_revision
+                        ";
 
                     var rows = await command.ExecuteNonQueryAsync();
 
                     if (rows == 0)
                     {
-                        throw new ConcurrencyException($"Update of saga with ID {sagaData.Id} did not succeed because someone else beat us to it");
+                        throw new ConcurrencyException(
+                            $"Update of saga with ID {sagaData.Id} did not succeed because someone else beat us to it");
                     }
                 }
 
@@ -303,12 +306,10 @@ UPDATE ""{_dataTableName}""
                 {
                     command.CommandText =
                         $@"
-
-DELETE 
-    FROM ""{_dataTableName}"" 
-    WHERE ""id"" = :id AND ""revision"" = :current_revision;
-
-";
+                        DELETE 
+                            FROM {_dataTableName} 
+                            WHERE id = :id AND revision = :current_revision
+                        ";
 
                     command.Parameters.Add("id", OracleDbType.Raw).Value = sagaData.Id;
                     command.Parameters.Add("current_revision", OracleDbType.Int64).Value = sagaData.Revision;
@@ -317,7 +318,8 @@ DELETE
 
                     if (rows == 0)
                     {
-                        throw new ConcurrencyException($"Delete of saga with ID {sagaData.Id} did not succeed because someone else beat us to it");
+                        throw new ConcurrencyException(
+                            $"Delete of saga with ID {sagaData.Id} did not succeed because someone else beat us to it");
                     }
                 }
 
@@ -325,12 +327,10 @@ DELETE
                 {
                     command.CommandText =
                         $@"
-
-DELETE 
-    FROM ""{_indexTableName}"" 
-    WHERE ""saga_id"" = :id
-
-";
+                        DELETE 
+                            FROM {_indexTableName} 
+                            WHERE saga_id = :id
+                        ";
                     command.Parameters.Add("id", OracleDbType.Raw).Value = sagaData.Id;
 
                     await command.ExecuteNonQueryAsync();
@@ -342,16 +342,17 @@ DELETE
             sagaData.Revision++;
         }
 
-        async Task CreateIndex(ISagaData sagaData, OracleDbConnection connection, IEnumerable<KeyValuePair<string, string>> propertiesToIndex)
+        async Task CreateIndex(ISagaData sagaData, OracleDbConnection connection,
+            IEnumerable<KeyValuePair<string, string>> propertiesToIndex)
         {
             var sagaTypeName = GetSagaTypeName(sagaData.GetType());
             var parameters = propertiesToIndex
                 .Select((p, i) => new
                 {
+                    SagaType = sagaTypeName,
+                    SagaId = sagaData.Id.ToByteArray(),
                     PropertyName = p.Key,
                     PropertyValue = p.Value ?? "",
-                    PropertyNameParameter = $":n{i}",
-                    PropertyValueParameter = $":v{i}"
                 })
                 .ToList();
 
@@ -359,30 +360,16 @@ DELETE
             using (var command = connection.CreateCommand())
             {
                 // generate batch insert with SQL for each entry in the index
-                var inserts = parameters
-                    .Select(a =>
-                        $@"
-                        INSERT
-                            INTO ""{_indexTableName}"" (saga_type, key, value, saga_id) 
-                            VALUES (:saga_type, {a.PropertyNameParameter}, {a.PropertyValueParameter}, :saga_id)
-
-                        ");
-
-                var sql = string.Join(";" + Environment.NewLine, inserts);
-
-                command.CommandText = sql;
-
-                foreach (var parameter in parameters)
-                {
-                    command.Parameters.Add(parameter.PropertyNameParameter, OracleDbType.Varchar2).Value = parameter.PropertyName;
-                    command.Parameters.Add(parameter.PropertyValueParameter, OracleDbType.Varchar2).Value = parameter.PropertyValue;
-                }
-
-                command.Parameters.Add("saga_type", OracleDbType.Varchar2).Value = sagaTypeName;
-                command.Parameters.Add("saga_id", OracleDbType.Raw).Value = sagaData.Id;
-
+                command.CommandText =
+                    $@"INSERT INTO {_indexTableName} (saga_type, key, value, saga_id)  VALUES (:saga_type, :key, :value, :saga_id)";
+                command.ArrayBindCount = parameters.Count;
+                command.Parameters.Add(new OracleParameter("saga_type", OracleDbType.NVarchar2, parameters.Select(x => x.SagaType).ToArray(), ParameterDirection.Input));
+                command.Parameters.Add(new OracleParameter("key", OracleDbType.NVarchar2, parameters.Select(x => x.PropertyName).ToArray(), ParameterDirection.Input));
+                command.Parameters.Add(new OracleParameter("value", OracleDbType.NVarchar2, parameters.Select(x => x.PropertyValue).ToArray(), ParameterDirection.Input));
+                command.Parameters.Add(new OracleParameter("saga_id", OracleDbType.Raw, parameters.Select(x => x.SagaId).ToArray(), ParameterDirection.Input));
                 await command.ExecuteNonQueryAsync();
             }
+
         }
 
         string GetSagaTypeName(Type sagaDataType)
