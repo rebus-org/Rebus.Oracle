@@ -167,7 +167,6 @@ namespace Rebus.Oracle.Transport
                 {
                     selectCommand.CommandText = $"rebus_dequeue_{_tableName}";
                     selectCommand.CommandType = CommandType.StoredProcedure;
-                    selectCommand.BindByName = true;
                     selectCommand.Parameters.Add(new OracleParameter("recipient", OracleDbType.Varchar2, _inputQueueName, ParameterDirection.Input));
                     selectCommand.Parameters.Add(new OracleParameter("output", OracleDbType.RefCursor ,ParameterDirection.Output));
                     selectCommand.InitialLOBFetchSize = -1;
