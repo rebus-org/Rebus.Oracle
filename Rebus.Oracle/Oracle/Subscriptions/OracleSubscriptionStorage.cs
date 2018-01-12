@@ -72,6 +72,7 @@ CREATE TABLE {_tableName} (
             using (var command = connection.CreateCommand())
             {
                 command.CommandText = $@"select address from {_tableName} where topic = :topic";
+                command.BindByName = true;
 
                 command.Parameters.Add(new OracleParameter("topic", OracleDbType.Varchar2, topic, ParameterDirection.Input));
 
@@ -100,6 +101,7 @@ CREATE TABLE {_tableName} (
                 command.CommandText =
                     $@"insert into {_tableName} (topic, address) values (:topic, :address)";
 
+                command.BindByName = true;
                 command.Parameters.Add(new OracleParameter("topic", OracleDbType.Varchar2, topic, ParameterDirection.Input));
                 command.Parameters.Add(new OracleParameter("address", OracleDbType.Varchar2, subscriberAddress, ParameterDirection.Input));
 
@@ -127,6 +129,7 @@ CREATE TABLE {_tableName} (
                 command.CommandText =
                     $@"delete from {_tableName} where topic = :topic and address = :address";
 
+                command.BindByName = true;
                 command.Parameters.Add(new OracleParameter("topic", OracleDbType.Varchar2, topic, ParameterDirection.Input));
                 command.Parameters.Add(new OracleParameter("address", OracleDbType.Varchar2, subscriberAddress, ParameterDirection.Input));
 

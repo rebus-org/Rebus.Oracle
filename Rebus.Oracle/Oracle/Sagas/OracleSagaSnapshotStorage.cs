@@ -40,15 +40,15 @@ namespace Rebus.Oracle.Sagas
                     command.CommandText =
                         $@"
                         INSERT
-                            INTO ""{_tableName}"" (""id"", ""revision"", ""data"", ""metadata"")
-                            VALUES (:id, :revision, :data, :metadata);
-
+                            INTO {_tableName} (id, revision, data, metadata)
+                            VALUES (:id, :revision, :data, :metadata)
                         ";
+                    command.BindByName = true;
                     command.Parameters.Add("id", OracleDbType.Raw).Value = sagaData.Id;
                     command.Parameters.Add("revision", OracleDbType.Int64).Value = sagaData.Revision;
                     command.Parameters.Add("data", OracleDbType.Blob).Value = _objectSerializer.Serialize(sagaData);
                     command.Parameters.Add("metadata", OracleDbType.Clob).Value =
-                        _dictionarySerializer.SerializeToString(sagaAuditMetadata);
+                    _dictionarySerializer.SerializeToString(sagaAuditMetadata);
 
                     await command.ExecuteNonQueryAsync();
                 }
@@ -72,13 +72,13 @@ namespace Rebus.Oracle.Sagas
                 {
                     command.CommandText =
                         $@"
-                        CREATE TABLE ""{_tableName}"" (
-                            ""id"" UUID NOT NULL,
-                            ""revision"" INTEGER NOT NULL,
-                            ""metadata"" JSONB NOT NULL,
-                            ""data"" BYTEA NOT NULL,
-                            PRIMARY KEY (""id"", ""revision"")
-                        );
+                        CREATE TABLE {_tableName} (
+                            id RAW(16) NOT NULL,
+                            revision NUMBER(10) NOT NULL,
+                            metadata CLOB NOT NULL,
+                            data BLOB NOT NULL,
+                            CONSTRAINT {_tableName}_pk PRIMARY KEY (id, revision)
+                        )
                         ";
 
                     command.ExecuteNonQuery();

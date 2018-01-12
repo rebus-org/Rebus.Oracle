@@ -142,6 +142,7 @@ namespace Rebus.Oracle.Transport
                 // must be last because the other functions on the headers might change them
                 var serializedHeaders = HeaderSerializer.Serialize(headers);
 
+                command.BindByName = true;
                 command.Parameters.Add(new OracleParameter("recipient", OracleDbType.Varchar2, destinationAddress, ParameterDirection.Input));
                 command.Parameters.Add(new OracleParameter("headers", OracleDbType.Blob, serializedHeaders, ParameterDirection.Input));
                 command.Parameters.Add(new OracleParameter("body", OracleDbType.Blob, message.Body, ParameterDirection.Input));
@@ -166,6 +167,7 @@ namespace Rebus.Oracle.Transport
                 {
                     selectCommand.CommandText = $"rebus_dequeue_{_tableName}";
                     selectCommand.CommandType = CommandType.StoredProcedure;
+                    selectCommand.BindByName = true;
                     selectCommand.Parameters.Add(new OracleParameter("recipient", OracleDbType.Varchar2, _inputQueueName, ParameterDirection.Input));
                     selectCommand.Parameters.Add(new OracleParameter("output", OracleDbType.RefCursor ,ParameterDirection.Output));
                     selectCommand.InitialLOBFetchSize = -1;
@@ -213,10 +215,11 @@ namespace Rebus.Oracle.Transport
                     {
                         command.CommandText =
                             $@"
-	            delete from {_tableName} 
-				where recipient = :recipient 
-				and expiration < systimestamp(6)
-";
+                            delete from {_tableName} 
+                            where recipient = :recipient 
+                            and expiration < systimestamp(6)
+                            ";
+                        command.BindByName = true;
                         command.Parameters.Add(new OracleParameter("recipient", OracleDbType.Varchar2, _inputQueueName, ParameterDirection.Input));
                         affectedRows = await command.ExecuteNonQueryAsync();
                     }

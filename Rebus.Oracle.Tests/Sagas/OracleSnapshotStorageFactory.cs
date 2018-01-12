@@ -31,7 +31,7 @@ namespace Rebus.Oracle.Tests.Sagas
             {
                 using (var command = connection.CreateCommand())
                 {
-                    command.CommandText = $@"SELECT ""data"", ""metadata"" FROM ""{TableName}""";
+                    command.CommandText = $@"SELECT data, metadata FROM {TableName}";
 
                     using (var reader = command.ExecuteReader())
                     {

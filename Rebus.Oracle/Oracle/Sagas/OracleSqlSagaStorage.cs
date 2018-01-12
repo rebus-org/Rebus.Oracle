@@ -203,6 +203,7 @@ namespace Rebus.Oracle.Sagas
             {
                 using (var command = connection.CreateCommand())
                 {
+                    command.BindByName = true;
                     command.Parameters.Add("id", OracleDbType.Raw).Value = sagaData.Id;
                     command.Parameters.Add("revision", OracleDbType.Int64).Value = sagaData.Revision;
                     command.Parameters.Add("data", OracleDbType.Blob).Value = _objectSerializer.Serialize(sagaData);
@@ -254,6 +255,7 @@ namespace Rebus.Oracle.Sagas
                 // first, delete existing index
                 using (var command = connection.CreateCommand())
                 {
+                    command.BindByName = true;
                     command.CommandText = $@"DELETE FROM {_indexTableName} WHERE saga_id = :id";
                     command.Parameters.Add("id", OracleDbType.Raw).Value = sagaData.Id;
                     await command.ExecuteNonQueryAsync();
@@ -331,6 +333,7 @@ namespace Rebus.Oracle.Sagas
                             FROM {_indexTableName} 
                             WHERE saga_id = :id
                         ";
+                    command.BindByName = true;
                     command.Parameters.Add("id", OracleDbType.Raw).Value = sagaData.Id;
 
                     await command.ExecuteNonQueryAsync();
@@ -362,6 +365,7 @@ namespace Rebus.Oracle.Sagas
                 // generate batch insert with SQL for each entry in the index
                 command.CommandText =
                     $@"INSERT INTO {_indexTableName} (saga_type, key, value, saga_id)  VALUES (:saga_type, :key, :value, :saga_id)";
+                command.BindByName = true;
                 command.ArrayBindCount = parameters.Count;
                 command.Parameters.Add(new OracleParameter("saga_type", OracleDbType.NVarchar2, parameters.Select(x => x.SagaType).ToArray(), ParameterDirection.Input));
                 command.Parameters.Add(new OracleParameter("key", OracleDbType.NVarchar2, parameters.Select(x => x.PropertyName).ToArray(), ParameterDirection.Input));

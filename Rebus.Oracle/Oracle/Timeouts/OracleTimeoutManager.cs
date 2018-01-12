@@ -48,9 +48,8 @@ namespace Rebus.Oracle.Timeouts
                 using (var command = connection.CreateCommand())
                 {
                     command.CommandText =
-                        $@"
-INSERT INTO {_tableName} (due_time, headers, body) VALUES (:due_time, :headers, :body)";
-
+                        $@"INSERT INTO {_tableName} (due_time, headers, body) VALUES (:due_time, :headers, :body)"; 
+                    command.BindByName = true;
                     command.Parameters.Add(new OracleParameter("due_time", OracleDbType.TimeStampTZ, approximateDueTime.ToUniversalTime().DateTime, ParameterDirection.Input));
                     command.Parameters.Add(new OracleParameter("headers", OracleDbType.Clob, _dictionarySerializer.SerializeToString(headers), ParameterDirection.Input));
                     command.Parameters.Add(new OracleParameter("body", OracleDbType.Blob, body, ParameterDirection.Input));
@@ -74,17 +73,18 @@ INSERT INTO {_tableName} (due_time, headers, body) VALUES (:due_time, :headers, 
                 {
                     command.CommandText =
                         $@"
-SELECT
-    id,
-    headers, 
-    body 
+                        SELECT
+                            id,
+                            headers, 
+                            body 
 
-FROM {_tableName} 
+                        FROM {_tableName} 
 
-WHERE due_time <= :current_time 
+                        WHERE due_time <= :current_time 
 
-ORDER BY due_time
-FOR UPDATE";
+                        ORDER BY due_time
+                        FOR UPDATE";
+                    command.BindByName = true;
                     command.Parameters.Add(new OracleParameter("current_time", OracleDbType.TimeStampTZ, RebusTime.Now.ToUniversalTime().DateTime, ParameterDirection.Input));
 
                     using (var reader = await command.ExecuteReaderAsync())
@@ -101,6 +101,7 @@ FOR UPDATE";
                             {
                                 using (var deleteCommand = connection.CreateCommand())
                                 {
+                                    deleteCommand.BindByName = true;
                                     deleteCommand.CommandText = $@"DELETE FROM {_tableName} WHERE id = :id";
                                     deleteCommand.Parameters.Add(new OracleParameter("id", OracleDbType.Int64, id, ParameterDirection.Input));
                                     await deleteCommand.ExecuteNonQueryAsync();
