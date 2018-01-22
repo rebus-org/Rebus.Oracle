@@ -1,33 +1,31 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using NpgsqlTypes;
+using Oracle.ManagedDataAccess.Client;
 using Rebus.Auditing.Sagas;
 using Rebus.Extensions;
 using Rebus.Sagas;
 using Rebus.Serialization;
 
-namespace Rebus.PostgreSql.Sagas
+namespace Rebus.Oracle.Sagas
 {
     /// <summary>
-    /// Implementation of <see cref="ISagaSnapshotStorage"/> that uses PostgreSQL to store the snapshots
+    /// Implementation of <see cref="ISagaSnapshotStorage"/> that uses Oracle to store the snapshots
     /// </summary>
-    public class PostgreSqlSagaSnapshotStorage : ISagaSnapshotStorage
+    public class OracleSagaSnapshotStorage : ISagaSnapshotStorage
     {
         readonly ObjectSerializer _objectSerializer = new ObjectSerializer();
         readonly DictionarySerializer _dictionarySerializer = new DictionarySerializer();
-        readonly PostgresConnectionHelper _connectionHelper;
+        readonly OracleConnectionHelper _connectionHelper;
         readonly string _tableName;
 
         /// <summary>
         /// Constructs the storage
         /// </summary>
-        public PostgreSqlSagaSnapshotStorage(PostgresConnectionHelper connectionHelper, string tableName)
+        public OracleSagaSnapshotStorage(OracleConnectionHelper connectionHelper, string tableName)
         {
-            if (connectionHelper == null) throw new ArgumentNullException(nameof(connectionHelper));
-            if (tableName == null) throw new ArgumentNullException(nameof(tableName));
-            _connectionHelper = connectionHelper;
-            _tableName = tableName;
+            _connectionHelper = connectionHelper ?? throw new ArgumentNullException(nameof(connectionHelper));
+            _tableName = tableName ?? throw new ArgumentNullException(nameof(tableName));
         }
 
         /// <summary>
@@ -41,22 +39,21 @@ namespace Rebus.PostgreSql.Sagas
                 {
                     command.CommandText =
                         $@"
-
-INSERT
-    INTO ""{_tableName}"" (""id"", ""revision"", ""data"", ""metadata"")
-    VALUES (@id, @revision, @data, @metadata);
-
-";
-                    command.Parameters.Add("id", NpgsqlDbType.Uuid).Value = sagaData.Id;
-                    command.Parameters.Add("revision", NpgsqlDbType.Integer).Value = sagaData.Revision;
-                    command.Parameters.Add("data", NpgsqlDbType.Bytea).Value = _objectSerializer.Serialize(sagaData);
-                    command.Parameters.Add("metadata", NpgsqlDbType.Jsonb).Value =
-                        _dictionarySerializer.SerializeToString(sagaAuditMetadata);
+                        INSERT
+                            INTO {_tableName} (id, revision, data, metadata)
+                            VALUES (:id, :revision, :data, :metadata)
+                        ";
+                    command.BindByName = true;
+                    command.Parameters.Add("id", OracleDbType.Raw).Value = sagaData.Id;
+                    command.Parameters.Add("revision", OracleDbType.Int64).Value = sagaData.Revision;
+                    command.Parameters.Add("data", OracleDbType.Blob).Value = _objectSerializer.Serialize(sagaData);
+                    command.Parameters.Add("metadata", OracleDbType.Clob).Value =
+                    _dictionarySerializer.SerializeToString(sagaAuditMetadata);
 
                     await command.ExecuteNonQueryAsync();
                 }
                 
-                await connection.Complete();
+                connection.Complete();
             }
         }
 
@@ -75,19 +72,19 @@ INSERT
                 {
                     command.CommandText =
                         $@"
-CREATE TABLE ""{_tableName}"" (
-	""id"" UUID NOT NULL,
-	""revision"" INTEGER NOT NULL,
-	""metadata"" JSONB NOT NULL,
-	""data"" BYTEA NOT NULL,
-	PRIMARY KEY (""id"", ""revision"")
-);
-";
+                        CREATE TABLE {_tableName} (
+                            id RAW(16) NOT NULL,
+                            revision NUMBER(10) NOT NULL,
+                            metadata CLOB NOT NULL,
+                            data BLOB NOT NULL,
+                            CONSTRAINT {_tableName}_pk PRIMARY KEY (id, revision)
+                        )
+                        ";
 
                     command.ExecuteNonQuery();
                 }
 
-                Task.Run(async () => await connection.Complete()).Wait();
+                connection.Complete();
             }
         }
     }

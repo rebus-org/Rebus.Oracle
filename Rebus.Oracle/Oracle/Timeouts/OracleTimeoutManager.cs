@@ -1,39 +1,41 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Data;
+using System.Linq;
+using System.Runtime.InteropServices;
 using System.Threading.Tasks;
-using NpgsqlTypes;
+using Oracle.ManagedDataAccess.Client;
 using Rebus.Logging;
 using Rebus.Serialization;
 using Rebus.Time;
 using Rebus.Timeouts;
+
 // ReSharper disable AccessToDisposedClosure
 
 #pragma warning disable 1998
 
-namespace Rebus.PostgreSql.Timeouts
+namespace Rebus.Oracle.Timeouts
 {
     /// <summary>
-    /// Implementation of <see cref="ITimeoutManager"/> that uses PostgreSQL to do its thing. Can be used safely by multiple processes competing
+    /// Implementation of <see cref="ITimeoutManager"/> that uses Oracle to do its thing. Can be used safely by multiple processes competing
     /// over the same table of timeouts because row-level locking is used when querying for due timeouts.
     /// </summary>
-    public class PostgreSqlTimeoutManager : ITimeoutManager
+    public class OracleTimeoutManager : ITimeoutManager
     {
         readonly DictionarySerializer _dictionarySerializer = new DictionarySerializer();
-        readonly PostgresConnectionHelper _connectionHelper;
+        readonly OracleConnectionHelper _connectionHelper;
         readonly string _tableName;
         readonly ILog _log;
 
         /// <summary>
         /// Constructs the timeout manager
         /// </summary>
-        public PostgreSqlTimeoutManager(PostgresConnectionHelper connectionHelper, string tableName, IRebusLoggerFactory rebusLoggerFactory)
+        public OracleTimeoutManager(OracleConnectionHelper connectionHelper, string tableName, IRebusLoggerFactory rebusLoggerFactory)
         {
-            if (connectionHelper == null) throw new ArgumentNullException(nameof(connectionHelper));
-            if (tableName == null) throw new ArgumentNullException(nameof(tableName));
             if (rebusLoggerFactory == null) throw new ArgumentNullException(nameof(rebusLoggerFactory));
-            _connectionHelper = connectionHelper;
-            _tableName = tableName;
-            _log = rebusLoggerFactory.GetLogger<PostgreSqlTimeoutManager>();
+            _connectionHelper = connectionHelper ?? throw new ArgumentNullException(nameof(connectionHelper));
+            _tableName = tableName ?? throw new ArgumentNullException(nameof(tableName));
+            _log = rebusLoggerFactory.GetLogger<OracleTimeoutManager>();
         }
 
         /// <summary>
@@ -46,17 +48,15 @@ namespace Rebus.PostgreSql.Timeouts
                 using (var command = connection.CreateCommand())
                 {
                     command.CommandText =
-                        $@"
-INSERT INTO ""{_tableName}"" (""due_time"", ""headers"", ""body"") VALUES (@due_time, @headers, @body)";
-
-                    command.Parameters.Add("due_time", NpgsqlDbType.Timestamp).Value = approximateDueTime.ToUniversalTime().DateTime;
-                    command.Parameters.Add("headers", NpgsqlDbType.Text).Value = _dictionarySerializer.SerializeToString(headers);
-                    command.Parameters.Add("body", NpgsqlDbType.Bytea).Value = body;
-
+                        $@"INSERT INTO {_tableName} (due_time, headers, body) VALUES (:due_time, :headers, :body)"; 
+                    command.BindByName = true;
+                    command.Parameters.Add(new OracleParameter("due_time", OracleDbType.TimeStampTZ, approximateDueTime.ToUniversalTime().DateTime, ParameterDirection.Input));
+                    command.Parameters.Add(new OracleParameter("headers", OracleDbType.Clob, _dictionarySerializer.SerializeToString(headers), ParameterDirection.Input));
+                    command.Parameters.Add(new OracleParameter("body", OracleDbType.Blob, body, ParameterDirection.Input));
                     await command.ExecuteNonQueryAsync();
                 }
 
-                await connection.Complete();
+                connection.Complete();
             }
         }
 
@@ -73,22 +73,19 @@ INSERT INTO ""{_tableName}"" (""due_time"", ""headers"", ""body"") VALUES (@due_
                 {
                     command.CommandText =
                         $@"
+                        SELECT
+                            id,
+                            headers, 
+                            body 
 
-SELECT
-    ""id"",
-    ""headers"", 
-    ""body"" 
+                        FROM {_tableName} 
 
-FROM ""{_tableName}"" 
+                        WHERE due_time <= :current_time 
 
-WHERE ""due_time"" <= @current_time 
-
-ORDER BY ""due_time""
-
-FOR UPDATE;
-
-";
-                    command.Parameters.Add("current_time", NpgsqlDbType.Timestamp).Value = RebusTime.Now.ToUniversalTime().DateTime;
+                        ORDER BY due_time
+                        FOR UPDATE";
+                    command.BindByName = true;
+                    command.Parameters.Add(new OracleParameter("current_time", OracleDbType.TimeStampTZ, RebusTime.Now.ToUniversalTime().DateTime, ParameterDirection.Input));
 
                     using (var reader = await command.ExecuteReaderAsync())
                     {
@@ -104,8 +101,9 @@ FOR UPDATE;
                             {
                                 using (var deleteCommand = connection.CreateCommand())
                                 {
-                                    deleteCommand.CommandText = $@"DELETE FROM ""{_tableName}"" WHERE ""id"" = @id";
-                                    deleteCommand.Parameters.Add("id", NpgsqlDbType.Bigint).Value = id;
+                                    deleteCommand.BindByName = true;
+                                    deleteCommand.CommandText = $@"DELETE FROM {_tableName} WHERE id = :id";
+                                    deleteCommand.Parameters.Add(new OracleParameter("id", OracleDbType.Int64, id, ParameterDirection.Input));
                                     await deleteCommand.ExecuteNonQueryAsync();
                                 }
                             }));
@@ -113,7 +111,7 @@ FOR UPDATE;
 
                         return new DueMessagesResult(dueMessages, async () =>
                         {
-                            await connection.Complete();
+                            connection.Complete();
                             connection.Dispose();
                         });
                     }
@@ -135,39 +133,57 @@ FOR UPDATE;
             {
                 var tableNames = connection.GetTableNames();
 
-                if (tableNames.Contains(_tableName))
+                if (tableNames.Contains(_tableName, StringComparer.OrdinalIgnoreCase))
                 {
                     return;
                 }
 
                 _log.Info("Table {tableName} does not exist - it will be created now", _tableName);
+                using (var command = connection.CreateCommand())
+                {
+                    command.CommandText =
+                        $@"
+                        CREATE TABLE {_tableName} (
+                            id  NUMBER(10) NOT NULL,
+                            due_time TIMESTAMP(7) WITH TIME ZONE NOT NULL,
+                            headers CLOB,
+                            body  BLOB,
+                            CONSTRAINT {_tableName}_pk PRIMARY KEY(id)
+                         )";
+
+                    command.ExecuteNonQuery();
+                }
+                using (var command = connection.CreateCommand())
+                {
+                    command.CommandText =
+                        $@"CREATE SEQUENCE {_tableName}_SEQ";
+                    command.ExecuteNonQuery();
+                }
 
                 using (var command = connection.CreateCommand())
                 {
                     command.CommandText =
                         $@"
-CREATE TABLE ""{_tableName}"" (
-    ""id"" BIGSERIAL NOT NULL,
-    ""due_time"" TIMESTAMP WITH TIME ZONE NOT NULL,
-    ""headers"" TEXT NULL,
-    ""body"" BYTEA NULL,
-    PRIMARY KEY (""id"")
-);
-";
-
+                        CREATE OR REPLACE TRIGGER {_tableName}_on_insert
+                             BEFORE INSERT ON  {_tableName}
+                             FOR EACH ROW
+                        BEGIN
+                            if :new.Id is null then
+                              :new.id := {_tableName}_seq.nextval;
+                            END IF;
+                        END;
+                        ";
                     command.ExecuteNonQuery();
                 }
-
                 using (var command = connection.CreateCommand())
                 {
                     command.CommandText = $@"
-CREATE INDEX ON ""{_tableName}"" (""due_time"");
-";
+                        CREATE INDEX {_tableName}_due_idx ON {_tableName} (due_time)";
 
                     command.ExecuteNonQuery();
                 }
 
-                Task.Run(async () => await connection.Complete()).Wait();
+                connection.Complete();
             }
         }
     }

@@ -1,22 +1,22 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Data;
 using System.Threading.Tasks;
-using Npgsql;
-using NpgsqlTypes;
+using Oracle.ManagedDataAccess.Client;
 using Rebus.Extensions;
 using Rebus.Logging;
 using Rebus.Subscriptions;
 
-namespace Rebus.PostgreSql.Subscriptions
+namespace Rebus.Oracle.Subscriptions
 {
     /// <summary>
-    /// Implementation of <see cref="ISubscriptionStorage"/> that uses Postgres to do its thing
+    /// Implementation of <see cref="ISubscriptionStorage"/> that uses Oracle to do its thing
     /// </summary>
-    public class PostgreSqlSubscriptionStorage : ISubscriptionStorage
+    public class OracleSubscriptionStorage : ISubscriptionStorage
     {
-        const string UniqueKeyViolation = "23505";
+        const int UniqueKeyViolation = 1;
 
-        readonly PostgresConnectionHelper _connectionHelper;
+        readonly OracleConnectionHelper _connectionHelper;
         readonly string _tableName;
         readonly ILog _log;
 
@@ -25,15 +25,13 @@ namespace Rebus.PostgreSql.Subscriptions
         /// If <paramref name="isCentralized"/> is true, subscribing/unsubscribing will be short-circuited by manipulating
         /// subscriptions directly, instead of requesting via messages
         /// </summary>
-        public PostgreSqlSubscriptionStorage(PostgresConnectionHelper connectionHelper, string tableName, bool isCentralized, IRebusLoggerFactory rebusLoggerFactory)
+        public OracleSubscriptionStorage(OracleConnectionHelper connectionHelper, string tableName, bool isCentralized, IRebusLoggerFactory rebusLoggerFactory)
         {
-            if (connectionHelper == null) throw new ArgumentNullException(nameof(connectionHelper));
-            if (tableName == null) throw new ArgumentNullException(nameof(tableName));
             if (rebusLoggerFactory == null) throw new ArgumentNullException(nameof(rebusLoggerFactory));
-            _connectionHelper = connectionHelper;
-            _tableName = tableName;
+            _connectionHelper = connectionHelper ?? throw new ArgumentNullException(nameof(connectionHelper));
+            _tableName = tableName ?? throw new ArgumentNullException(nameof(tableName));
             IsCentralized = isCentralized;
-            _log = rebusLoggerFactory.GetLogger<PostgreSqlSubscriptionStorage>();
+            _log = rebusLoggerFactory.GetLogger<OracleSubscriptionStorage>();
         }
 
         /// <summary>
@@ -53,17 +51,15 @@ namespace Rebus.PostgreSql.Subscriptions
                 {
                     command.CommandText =
                         $@"
-CREATE TABLE ""{_tableName
-                            }"" (
-	""topic"" VARCHAR(200) NOT NULL,
-	""address"" VARCHAR(200) NOT NULL,
-	PRIMARY KEY (""topic"", ""address"")
-);
-";
+CREATE TABLE {_tableName} (
+	topic VARCHAR(200) NOT NULL,
+	address VARCHAR(200) NOT NULL,
+	PRIMARY KEY (topic,address)
+)";
                     command.ExecuteNonQuery();
                 }
 
-                Task.Run(async () => await connection.Complete()).Wait();
+                connection.Complete();
             }
         }
 
@@ -75,9 +71,10 @@ CREATE TABLE ""{_tableName
             using (var connection = await _connectionHelper.GetConnection())
             using (var command = connection.CreateCommand())
             {
-                command.CommandText = $@"select ""address"" from ""{_tableName}"" where ""topic"" = @topic";
+                command.CommandText = $@"select address from {_tableName} where topic = :topic";
+                command.BindByName = true;
 
-                command.Parameters.AddWithValue("topic", NpgsqlDbType.Text, topic);
+                command.Parameters.Add(new OracleParameter("topic", OracleDbType.Varchar2, topic, ParameterDirection.Input));
 
                 var endpoints = new List<string>();
 
@@ -102,21 +99,22 @@ CREATE TABLE ""{_tableName
             using (var command = connection.CreateCommand())
             {
                 command.CommandText =
-                    $@"insert into ""{_tableName}"" (""topic"", ""address"") values (@topic, @address)";
+                    $@"insert into {_tableName} (topic, address) values (:topic, :address)";
 
-                command.Parameters.AddWithValue("topic", NpgsqlDbType.Text, topic);
-                command.Parameters.AddWithValue("address", NpgsqlDbType.Text, subscriberAddress);
+                command.BindByName = true;
+                command.Parameters.Add(new OracleParameter("topic", OracleDbType.Varchar2, topic, ParameterDirection.Input));
+                command.Parameters.Add(new OracleParameter("address", OracleDbType.Varchar2, subscriberAddress, ParameterDirection.Input));
 
                 try
                 {
                     command.ExecuteNonQuery();
                 }
-                catch (PostgresException exception) when (exception.SqlState == UniqueKeyViolation)
+                catch (OracleException exception) when (exception.Number == UniqueKeyViolation)
                 {
                     // it's already there
                 }
 
-                await connection.Complete();
+                connection.Complete();
             }
         }
 
@@ -129,21 +127,22 @@ CREATE TABLE ""{_tableName
             using (var command = connection.CreateCommand())
             {
                 command.CommandText =
-                    $@"delete from ""{_tableName}"" where ""topic"" = @topic and ""address"" = @address;";
+                    $@"delete from {_tableName} where topic = :topic and address = :address";
 
-                command.Parameters.AddWithValue("topic", NpgsqlDbType.Text, topic);
-                command.Parameters.AddWithValue("address", NpgsqlDbType.Text, subscriberAddress);
+                command.BindByName = true;
+                command.Parameters.Add(new OracleParameter("topic", OracleDbType.Varchar2, topic, ParameterDirection.Input));
+                command.Parameters.Add(new OracleParameter("address", OracleDbType.Varchar2, subscriberAddress, ParameterDirection.Input));
 
                 try
                 {
                     command.ExecuteNonQuery();
                 }
-                catch (NpgsqlException exception)
+                catch (OracleException exception)
                 {
                     Console.WriteLine(exception);
                 }
 
-                await connection.Complete();
+                connection.Complete();
             }
         }
 

@@ -6,14 +6,14 @@ using NUnit.Framework;
 using Rebus.Activation;
 using Rebus.Config;
 using Rebus.Logging;
-using Rebus.PostgreSql.Transport;
+using Rebus.Oracle.Transport;
 using Rebus.Tests.Contracts;
 using Rebus.Tests.Contracts.Extensions;
 using Rebus.Tests.Contracts.Utilities;
 
-namespace Rebus.PostgreSql.Tests.Transport
+namespace Rebus.Oracle.Tests.Transport
 {
-    public class TestPostgreSqlTransportCleanup
+    public class TestOracleTransportCleanup
     {
         [TestFixture]
         public class TestSqlServerTransportCleanup : FixtureBase
@@ -33,7 +33,7 @@ namespace Rebus.PostgreSql.Tests.Transport
 
                 Configure.With(_activator)
                     .Logging(l => l.Use(_loggerFactory))
-                    .Transport(t => t.UsePostgreSql(PostgreSqlTestHelper.ConnectionString, "Messages", queueName))
+                    .Transport(t => t.UseOracle(OracleTestHelper.ConnectionString, "Messages", queueName))
                     .Start();
             }
 

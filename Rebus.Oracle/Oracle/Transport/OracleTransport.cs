@@ -3,34 +3,34 @@ using System.Collections.Generic;
 using System.Data;
 using System.Data.SqlClient;
 using System.Diagnostics;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using NpgsqlTypes;
+using Oracle.ManagedDataAccess.Client;
+using Oracle.ManagedDataAccess.Types;
 using Rebus.Bus;
 using Rebus.Exceptions;
-using Rebus.Logging;
-using Rebus.Messages;
-using Rebus.Threading;
-using Rebus.Transport;
-using System.Linq;
-using Npgsql;
 using Rebus.Extensions;
 using Rebus.Internals;
+using Rebus.Logging;
+using Rebus.Messages;
 using Rebus.Serialization;
+using Rebus.Threading;
 using Rebus.Time;
+using Rebus.Transport;
 
-namespace Rebus.PostgreSql.Transport
+namespace Rebus.Oracle.Transport
 {
     /// <summary>
-    /// Implementation of <see cref="ITransport"/> that uses PostgreSQL to move messages around
+    /// Implementation of <see cref="ITransport"/> that uses Oracle to move messages around
     /// </summary>
-    public class PostgreSqlTransport : ITransport, IInitializable, IDisposable
+    public class OracleTransport : ITransport, IInitializable, IDisposable
     {
-        const string CurrentConnectionKey = "postgresql-transport-current-connection";
+        const string CurrentConnectionKey = "oracle-transport-current-connection";
 
         static readonly HeaderSerializer HeaderSerializer = new HeaderSerializer();
 
-        readonly PostgresConnectionHelper _connectionHelper;
+        readonly OracleConnectionHelper _connectionHelper;
         readonly string _tableName;
         readonly string _inputQueueName;
         readonly AsyncBottleneck _receiveBottleneck = new AsyncBottleneck(20);
@@ -59,12 +59,12 @@ namespace Rebus.PostgreSql.Transport
         /// <param name="inputQueueName"></param>
         /// <param name="rebusLoggerFactory"></param>
         /// <param name="asyncTaskFactory"></param>
-        public PostgreSqlTransport(PostgresConnectionHelper connectionHelper, string tableName, string inputQueueName, IRebusLoggerFactory rebusLoggerFactory, IAsyncTaskFactory asyncTaskFactory)
+        public OracleTransport(OracleConnectionHelper connectionHelper, string tableName, string inputQueueName, IRebusLoggerFactory rebusLoggerFactory, IAsyncTaskFactory asyncTaskFactory)
         {
             if (rebusLoggerFactory == null) throw new ArgumentNullException(nameof(rebusLoggerFactory));
             if (asyncTaskFactory == null) throw new ArgumentNullException(nameof(asyncTaskFactory));
 
-            _log = rebusLoggerFactory.GetLogger<PostgreSqlTransport>();
+            _log = rebusLoggerFactory.GetLogger<OracleTransport>();
             _connectionHelper = connectionHelper ?? throw new ArgumentNullException(nameof(connectionHelper));
             _tableName = tableName ?? throw new ArgumentNullException(nameof(tableName));
             _inputQueueName = inputQueueName;
@@ -114,24 +114,24 @@ namespace Rebus.PostgreSql.Transport
             using (var command = connection.Connection.CreateCommand())
             {
                 command.CommandText = $@"
-INSERT INTO {_tableName}
-(
-    recipient,
-    headers,
-    body,
-    priority,
-    visible,
-    expiration
-)
-VALUES
-(
-    @recipient,
-    @headers,
-    @body,
-    @priority,
-    clock_timestamp() + @visible,
-    clock_timestamp() + @ttlseconds
-)";
+                    INSERT INTO {_tableName}
+                    (
+                        recipient,
+                        headers,
+                        body,
+                        priority,
+                        visible,
+                        expiration
+                    )
+                    VALUES
+                    (
+                        :recipient,
+                        :headers,
+                        :body,
+                        :priority,
+                        systimestamp(6) + :visible,
+                        systimestamp(6) + :ttlseconds
+                    )";
 
                 var headers = message.Headers.Clone();
 
@@ -142,12 +142,13 @@ VALUES
                 // must be last because the other functions on the headers might change them
                 var serializedHeaders = HeaderSerializer.Serialize(headers);
 
-                command.Parameters.Add("recipient", NpgsqlDbType.Text).Value = destinationAddress;
-                command.Parameters.Add("headers", NpgsqlDbType.Bytea).Value = serializedHeaders;
-                command.Parameters.Add("body", NpgsqlDbType.Bytea).Value = message.Body;
-                command.Parameters.Add("priority", NpgsqlDbType.Integer).Value = priority;
-                command.Parameters.Add("visible", NpgsqlDbType.Interval).Value = initialVisibilityDelay;
-                command.Parameters.Add("ttlseconds", NpgsqlDbType.Interval).Value = ttlSeconds;
+                command.BindByName = true;
+                command.Parameters.Add(new OracleParameter("recipient", OracleDbType.Varchar2, destinationAddress, ParameterDirection.Input));
+                command.Parameters.Add(new OracleParameter("headers", OracleDbType.Blob, serializedHeaders, ParameterDirection.Input));
+                command.Parameters.Add(new OracleParameter("body", OracleDbType.Blob, message.Body, ParameterDirection.Input));
+                command.Parameters.Add(new OracleParameter("priority", OracleDbType.Int32, priority, ParameterDirection.Input));
+                command.Parameters.Add(new OracleParameter("visible", OracleDbType.IntervalDS, initialVisibilityDelay, ParameterDirection.Input));
+                command.Parameters.Add(new OracleParameter("ttlseconds", OracleDbType.IntervalDS, ttlSeconds, ParameterDirection.Input));
 
                 await command.ExecuteNonQueryAsync();
             }
@@ -164,30 +165,20 @@ VALUES
 
                 using (var selectCommand = connection.Connection.CreateCommand())
                 {
-                    selectCommand.CommandText = $@"
-DELETE from {_tableName} 
-where id = 
-(
-    select id from {_tableName}
-    where recipient = @recipient
-    and visible < clock_timestamp()
-    and expiration > clock_timestamp() 
-    order by priority asc, id asc
-    for update skip locked
-    limit 1
-)
-returning id,
-headers,
-body
-";
-
-                    selectCommand.Parameters.Add("recipient", NpgsqlDbType.Text).Value = _inputQueueName;
+                    selectCommand.CommandText = $"rebus_dequeue_{_tableName}";
+                    selectCommand.CommandType = CommandType.StoredProcedure;
+                    selectCommand.Parameters.Add(new OracleParameter("recipient", OracleDbType.Varchar2, _inputQueueName, ParameterDirection.Input));
+                    selectCommand.Parameters.Add(new OracleParameter("output", OracleDbType.RefCursor ,ParameterDirection.Output));
+                    selectCommand.InitialLOBFetchSize = -1;
 
                     try
                     {
-                        using (var reader = await selectCommand.ExecuteReaderAsync(cancellationToken))
-                        {
-                            if (!await reader.ReadAsync(cancellationToken)) return null;
+                        selectCommand.ExecuteNonQuery();
+                        using (var reader = (selectCommand.Parameters["output"].Value as OracleRefCursor).GetDataReader()){
+                            if (!await reader.ReadAsync(cancellationToken))
+                            {
+                                return null;
+                            }
 
                             var headers = reader["headers"];
                             var headersDictionary = HeaderSerializer.Deserialize((byte[])headers);
@@ -222,16 +213,17 @@ body
                     {
                         command.CommandText =
                             $@"
-	            delete from {_tableName} 
-				where recipient = @recipient 
-				and expiration < clock_timestamp()
-";
-                        command.Parameters.Add("recipient", NpgsqlDbType.Text).Value = _inputQueueName;
+                            delete from {_tableName} 
+                            where recipient = :recipient 
+                            and expiration < systimestamp(6)
+                            ";
+                        command.BindByName = true;
+                        command.Parameters.Add(new OracleParameter("recipient", OracleDbType.Varchar2, _inputQueueName, ParameterDirection.Input));
                         affectedRows = await command.ExecuteNonQueryAsync();
                     }
 
                     results += affectedRows;
-                    await connection.Complete();
+                    connection.Complete();
 
                     if (affectedRows == 0) break;
                 }
@@ -282,29 +274,61 @@ body
                 ExecuteCommands(connection, $@"
 CREATE TABLE {_tableName}
 (
-	id serial NOT NULL,
-	recipient text NOT NULL,
-	priority int NOT NULL,
-    expiration timestamp with time zone NOT NULL,
-    visible timestamp with time zone NOT NULL,
-	headers bytea NOT NULL,
-	body bytea NOT NULL,
-    PRIMARY KEY (recipient, priority, id)
-);
+	id NUMBER(20) NOT NULL,
+	recipient VARCHAR2(255) NOT NULL,
+	priority NUMBER(20) NOT NULL,
+    expiration timestamp(7) with time zone NOT NULL,
+    visible timestamp(7) with time zone NOT NULL,
+	headers blob NOT NULL,
+	body blob NOT NULL
+)
+----
+ALTER TABLE {_tableName} ADD CONSTRAINT {_tableName}_pk PRIMARY KEY(recipient, priority, id)
+----
+CREATE SEQUENCE {_tableName}_SEQ
+----
+CREATE OR REPLACE TRIGGER {_tableName}_on_insert
+     BEFORE INSERT ON  {_tableName}
+     FOR EACH ROW
+BEGIN
+    if :new.Id is null then
+      :new.id := {_tableName}_seq.nextval;
+    END IF;
+END;
 ----
 CREATE INDEX idx_receive_{_tableName} ON {_tableName}
 (
 	recipient ASC,
     expiration ASC,
     visible ASC
-);
+)
+----
+create or replace PROCEDURE  rebus_dequeue_{_tableName}(recipient IN varchar, output OUT SYS_REFCURSOR ) AS
+  messageId number;
+  readCursor SYS_REFCURSOR; 
+begin
+
+    open readCursor for 
+    SELECT id
+    FROM {_tableName}
+    WHERE recipient = recipient
+            and visible < current_timestamp(6)
+            and expiration > current_timestamp(6)          
+    ORDER BY priority ASC, id ASC
+    for update skip locked;
+    
+    fetch readCursor into messageId;
+    close readCursor;      
+  open output for select * from {_tableName} where id = messageId;
+  delete from {_tableName} where  id = messageId;
+END;
 ");
 
-                AsyncHelpers.RunSync(() => connection.Complete());
+                connection.Complete();
             }
         }
 
-        static void ExecuteCommands(PostgresConnection connection, string sqlCommands)
+        static void ExecuteCommands(OracleDbConnection connection, string sqlCommands)
         {
             foreach (var sqlCommand in sqlCommands.Split(new[] { "----" }, StringSplitOptions.RemoveEmptyEntries))
             {
@@ -323,7 +347,7 @@ CREATE INDEX idx_receive_{_tableName} ON {_tableName}
             {
                 command.ExecuteNonQuery();
             }
-            catch (NpgsqlException exception)
+            catch (OracleException exception)
             {
                 throw new RebusApplicationException(exception, $@"Error executing SQL command
 {command.CommandText}
@@ -333,13 +357,13 @@ CREATE INDEX idx_receive_{_tableName} ON {_tableName}
 
         class ConnectionWrapper : IDisposable
         {
-            public ConnectionWrapper(PostgresConnection connection)
+            public ConnectionWrapper(OracleDbConnection connection)
             {
                 Connection = connection;
                 Semaphore = new SemaphoreSlim(1, 1);
             }
 
-            public PostgresConnection Connection { get; }
+            public OracleDbConnection Connection { get; }
             public SemaphoreSlim Semaphore { get; }
 
             public void Dispose()
@@ -357,7 +381,11 @@ CREATE INDEX idx_receive_{_tableName} ON {_tableName}
                     {
                         var dbConnection = await _connectionHelper.GetConnection();
                         var connectionWrapper = new ConnectionWrapper(dbConnection);
-                        context.OnCommitted(async () => await dbConnection.Complete());
+                        context.OnCommitted(() =>
+                        {
+                            dbConnection.Complete();
+                            return Task.FromResult(0);
+                        });
                         context.OnDisposed(() => connectionWrapper.Dispose());
                         return connectionWrapper;
                     });

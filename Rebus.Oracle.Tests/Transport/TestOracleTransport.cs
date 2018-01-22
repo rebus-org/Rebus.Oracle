@@ -8,28 +8,28 @@ using NUnit.Framework;
 using Rebus.Extensions;
 using Rebus.Logging;
 using Rebus.Messages;
-using Rebus.PostgreSql.Transport;
+using Rebus.Oracle.Transport;
 using Rebus.Tests.Contracts;
 using Rebus.Threading.TaskParallelLibrary;
 using Rebus.Transport;
 
-namespace Rebus.PostgreSql.Tests.Transport
+namespace Rebus.Oracle.Tests.Transport
 {
-    [TestFixture, Category(Categories.PostgreSql)]
-    public class TestPostgreSqlTransport : FixtureBase
+    [TestFixture, Category(Categories.Oracle)]
+    public class TestOracleTransport : FixtureBase
     {
         readonly string _tableName = "messages" + TestConfig.Suffix;
-        PostgreSqlTransport _transport;
+        OracleTransport _transport;
         CancellationToken _cancellationToken;
         const string QueueName = "input";
 
         protected override void SetUp()
         {
-            PostgreSqlTestHelper.DropTable(_tableName);
+            OracleTestHelper.DropTableAndSequence(_tableName);
             var consoleLoggerFactory = new ConsoleLoggerFactory(false);
             var asyncTaskFactory = new TplAsyncTaskFactory(consoleLoggerFactory);
-            var connectionHelper = new PostgresConnectionHelper(PostgreSqlTestHelper.ConnectionString);
-            _transport = new PostgreSqlTransport(connectionHelper, _tableName, QueueName, consoleLoggerFactory, asyncTaskFactory);
+            var connectionHelper = new OracleConnectionHelper(OracleTestHelper.ConnectionString);
+            _transport = new OracleTransport(connectionHelper, _tableName, QueueName, consoleLoggerFactory, asyncTaskFactory);
             _transport.EnsureTableIsCreated();
 
             Using(_transport);
@@ -74,6 +74,17 @@ namespace Rebus.PostgreSql.Tests.Transport
                 var transportMessage = await _transport.Receive(scope.TransactionContext, _cancellationToken);
 
                 Assert.That(transportMessage, Is.Null);
+            }
+        }
+
+        [Test]
+        public async Task RespectsSerializedAccessToUnderlyingConnectionEvenWhenCalledInParallel()
+        {
+            using (var scope = new RebusTransactionScope())
+            {
+                await Task.WhenAll(
+                    _transport.Send(QueueName, RecognizableMessage(), scope.TransactionContext),
+                    _transport.Send(QueueName, RecognizableMessage(), scope.TransactionContext));
             }
         }
 

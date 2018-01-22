@@ -1,7 +1,7 @@
-﻿namespace Rebus.PostgreSql.Tests
+﻿namespace Rebus.Oracle.Tests
 {
     public class Categories
     {
-        public const string PostgreSql = "PostgreSql";
+        public const string Oracle = "Oracle";
     }
 }

@@ -1,36 +1,35 @@
 using System;
 using System.Threading.Tasks;
-using Npgsql;
+using Oracle.ManagedDataAccess.Client;
+
 // ReSharper disable EmptyGeneralCatchClause
 #pragma warning disable 1998
 
-namespace Rebus.PostgreSql
+namespace Rebus.Oracle
 {
     /// <summary>
-    /// Wraps an opened <see cref="NpgsqlConnection"/> and makes it easier to work with it
+    /// Wraps an opened <see cref="OracleConnection"/> and makes it easier to work with it
     /// </summary>
-    public class PostgresConnection : IDisposable
+    public class OracleDbConnection : IDisposable
     {
-        readonly NpgsqlConnection _currentConnection;
-        NpgsqlTransaction _currentTransaction;
+        readonly OracleConnection _currentConnection;
+        OracleTransaction _currentTransaction;
 
         bool _disposed;
 
         /// <summary>
         /// Constructs the wrapper with the given connection and transaction
         /// </summary>
-        public PostgresConnection(NpgsqlConnection currentConnection, NpgsqlTransaction currentTransaction)
+        public OracleDbConnection(OracleConnection currentConnection, OracleTransaction currentTransaction)
         {
-            if (currentConnection == null) throw new ArgumentNullException(nameof(currentConnection));
-            if (currentTransaction == null) throw new ArgumentNullException(nameof(currentTransaction));
-            _currentConnection = currentConnection;
-            _currentTransaction = currentTransaction;
+            _currentConnection = currentConnection ?? throw new ArgumentNullException(nameof(currentConnection));
+            _currentTransaction = currentTransaction ?? throw new ArgumentNullException(nameof(currentTransaction));
         }
 
         /// <summary>
         /// Creates a new command, enlisting it in the current transaction
         /// </summary>
-        public NpgsqlCommand CreateCommand()
+        public OracleCommand CreateCommand()
         {
             var command = _currentConnection.CreateCommand();
             command.Transaction = _currentTransaction;
@@ -41,7 +40,7 @@ namespace Rebus.PostgreSql
         /// Completes the transaction
         /// </summary>
 
-        public async Task Complete()
+        public void Complete()
         {
             if (_currentTransaction == null) return;
             using (_currentTransaction)

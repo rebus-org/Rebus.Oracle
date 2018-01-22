@@ -1,49 +1,50 @@
 ﻿using System;
-using Rebus.Config;
 using Rebus.Logging;
+using Rebus.Oracle;
+using Rebus.Oracle.Transport;
 using Rebus.Pipeline;
 using Rebus.Pipeline.Receive;
 using Rebus.Threading;
 using Rebus.Timeouts;
 using Rebus.Transport;
 
-namespace Rebus.PostgreSql.Transport
+namespace Rebus.Config
 {
     /// <summary>
     /// Configuration extensions for the SQL transport
     /// </summary>
-    public static class PostgreSqlTransportConfigurationExtensions
+    public static class OracleTransportConfigurationExtensions
     {
         /// <summary>
-        /// Configures Rebus to use PostgreSql as its transport. The table specified by <paramref name="tableName"/> will be used to
+        /// Configures Rebus to use Oracle as its transport. The table specified by <paramref name="tableName"/> will be used to
         /// store messages, and the "queue" specified by <paramref name="inputQueueName"/> will be used when querying for messages.
         /// The message table will automatically be created if it does not exist.
         /// </summary>
-        public static void UsePostgreSql(this StandardConfigurer<ITransport> configurer, string connectionStringOrConnectionOrConnectionStringName, string tableName, string inputQueueName)
+        public static void UseOracle(this StandardConfigurer<ITransport> configurer, string connectionStringOrConnectionOrConnectionStringName, string tableName, string inputQueueName)
         {
-            Configure(configurer, loggerFactory => new PostgresConnectionHelper(connectionStringOrConnectionOrConnectionStringName), tableName, inputQueueName);
+            Configure(configurer, loggerFactory => new OracleConnectionHelper(connectionStringOrConnectionOrConnectionStringName), tableName, inputQueueName);
         }
 
         /// <summary>
-        /// Configures Rebus to use PostgreSql to transport messages as a one-way client (i.e. will not be able to receive any messages).
+        /// Configures Rebus to use Oracle to transport messages as a one-way client (i.e. will not be able to receive any messages).
         /// The table specified by <paramref name="tableName"/> will be used to store messages.
         /// The message table will automatically be created if it does not exist.
         /// </summary>
-        public static void UsePostgreSqlAsOneWayClient(this StandardConfigurer<ITransport> configurer, string connectionStringOrConnectionStringName, string tableName)
+        public static void UseOracleAsOneWayClient(this StandardConfigurer<ITransport> configurer, string connectionStringOrConnectionStringName, string tableName)
         {
-            Configure(configurer, loggerFactory => new PostgresConnectionHelper(connectionStringOrConnectionStringName), tableName, null);
+            Configure(configurer, loggerFactory => new OracleConnectionHelper(connectionStringOrConnectionStringName), tableName, null);
 
             OneWayClientBackdoor.ConfigureOneWayClient(configurer);
         }
 
-        static void Configure(StandardConfigurer<ITransport> configurer, Func<IRebusLoggerFactory, PostgresConnectionHelper> connectionProviderFactory, string tableName, string inputQueueName)
+        static void Configure(StandardConfigurer<ITransport> configurer, Func<IRebusLoggerFactory, OracleConnectionHelper> connectionProviderFactory, string tableName, string inputQueueName)
         {
             configurer.Register(context =>
             {
                 var rebusLoggerFactory = context.Get<IRebusLoggerFactory>();
                 var asyncTaskFactory = context.Get<IAsyncTaskFactory>();
                 var connectionProvider = connectionProviderFactory(rebusLoggerFactory);
-                var transport = new PostgreSqlTransport(connectionProvider, tableName, inputQueueName, rebusLoggerFactory, asyncTaskFactory);
+                var transport = new OracleTransport(connectionProvider, tableName, inputQueueName, rebusLoggerFactory, asyncTaskFactory);
                 transport.EnsureTableIsCreated();
                 return transport;
             });
