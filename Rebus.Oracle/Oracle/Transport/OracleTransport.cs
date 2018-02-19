@@ -167,7 +167,7 @@ namespace Rebus.Oracle.Transport
                 {
                     selectCommand.CommandText = $"rebus_dequeue_{_tableName}";
                     selectCommand.CommandType = CommandType.StoredProcedure;
-                    selectCommand.Parameters.Add(new OracleParameter("recipient", OracleDbType.Varchar2, _inputQueueName, ParameterDirection.Input));
+                    selectCommand.Parameters.Add(new OracleParameter("recipientQueue", OracleDbType.Varchar2, _inputQueueName, ParameterDirection.Input));
                     selectCommand.Parameters.Add(new OracleParameter("output", OracleDbType.RefCursor ,ParameterDirection.Output));
                     selectCommand.InitialLOBFetchSize = -1;
 
@@ -303,7 +303,7 @@ CREATE INDEX idx_receive_{_tableName} ON {_tableName}
     visible ASC
 )
 ----
-create or replace PROCEDURE  rebus_dequeue_{_tableName}(recipient IN varchar, output OUT SYS_REFCURSOR ) AS
+create or replace PROCEDURE  rebus_dequeue_{_tableName}(recipientQueue IN varchar, output OUT SYS_REFCURSOR ) AS
   messageId number;
   readCursor SYS_REFCURSOR; 
 begin
@@ -311,7 +311,7 @@ begin
     open readCursor for 
     SELECT id
     FROM {_tableName}
-    WHERE recipient = recipient
+    WHERE recipient = recipientQueue
             and visible < current_timestamp(6)
             and expiration > current_timestamp(6)          
     ORDER BY priority ASC, id ASC
