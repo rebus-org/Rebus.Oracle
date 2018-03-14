@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Description>Rebus.Oracle.Devart</Description>
+    <VersionPrefix>1.0.0</VersionPrefix>
+    <Authors>Jeffrey Wilbur</Authors>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <GenerateAssemblyTitleAttribute>false</GenerateAssemblyTitleAttribute>
+    <GenerateAssemblyDescriptionAttribute>false</GenerateAssemblyDescriptionAttribute>
+    <GenerateAssemblyConfigurationAttribute>false</GenerateAssemblyConfigurationAttribute>
+    <GenerateAssemblyCompanyAttribute>false</GenerateAssemblyCompanyAttribute>
+    <GenerateAssemblyProductAttribute>false</GenerateAssemblyProductAttribute>
+    <GenerateAssemblyCopyrightAttribute>false</GenerateAssemblyCopyrightAttribute>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Devart.Data.Oracle" Version="9.5.454" />
+    <PackageReference Include="Rebus" Version="4.2.1" />
+  </ItemGroup>
+
+</Project>
