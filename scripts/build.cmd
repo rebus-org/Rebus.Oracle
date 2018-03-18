@@ -2,14 +2,7 @@
 
 set scriptsdir=%~dp0
 set root=%scriptsdir%\..
-set project=%1
 set version=%2
-
-if "%project%"=="" (
-	echo Please invoke the build script with a project name as its first argument.
-	echo.
-	goto exit_fail
-)
 
 if "%version%"=="" (
 	echo Please invoke the build script with a version as its second argument.
@@ -27,16 +20,19 @@ if %ERRORLEVEL% neq 0 (
  	goto exit_fail
 )
 
-dotnet build "%root%\%project%" -c Release
+dotnet build "%root%\Rebus.Oracle" -c Release
+if %ERRORLEVEL% neq 0 (
+	popd
+ 	goto exit_fail
+)
+
+dotnet build "%root%\Rebus.Oracle.Devart" -c Release
 if %ERRORLEVEL% neq 0 (
 	popd
  	goto exit_fail
 )
 
 popd
-
-
-
 
 
 
