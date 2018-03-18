@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.0.0-a3
+## 1.0.0-a4
 
 * Initial release - thanks [dtabuenc]
 * Port to Devart driver - thanks [jeffreywilbur]
