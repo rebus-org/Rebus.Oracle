@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Globalization;
+using System.Linq;
 using System.Threading.Tasks;
 using Devart.Data.Oracle;
 using Rebus.Extensions;
@@ -41,9 +43,9 @@ namespace Rebus.Oracle.Subscriptions
         {
             using (var connection = _connectionHelper.GetConnection().Result)
             {
-                var tableNames = connection.GetTableNames().ToHashSet();
+                var tableNames = connection.GetTableNames();
 
-                if (tableNames.Contains(_tableName)) return;
+                if (tableNames.Any(tableName => _tableName.Equals(tableName, StringComparison.InvariantCultureIgnoreCase))) return;
 
                 _log.Info("Table {tableName} does not exist - it will be created now", _tableName);
 
