@@ -51,8 +51,8 @@ namespace Rebus.Oracle.Sagas
             {
                 var tableNames = connection.GetTableNames().ToHashSet();
 
-                var hasDataTable = tableNames.Contains(_dataTableName);
-                var hasIndexTable = tableNames.Contains(_indexTableName);
+                var hasDataTable = tableNames.Any(tableName => _dataTableName.Equals(tableName, StringComparison.InvariantCultureIgnoreCase));
+                var hasIndexTable = tableNames.Any(tableName => _indexTableName.Equals(tableName, StringComparison.InvariantCultureIgnoreCase));
 
                 if (hasDataTable && hasIndexTable)
                 {
@@ -135,8 +135,8 @@ namespace Rebus.Oracle.Sagas
                     {
                         command.CommandText = $@"
                             SELECT s.data
-                                FROM Saga_Data s
-                                JOIN Saga_Index i on s.id = i.saga_id 
+                                FROM {_dataTableName} s
+                                JOIN {_indexTableName} i on s.id = i.saga_id 
                                 WHERE i.saga_type = :saga_type AND  i.key = :key AND i.value = :value
                             ";
                         command.BindByName = true;

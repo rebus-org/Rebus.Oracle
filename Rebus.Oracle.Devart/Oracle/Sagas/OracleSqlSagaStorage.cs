@@ -49,10 +49,10 @@ namespace Rebus.Oracle.Sagas
         {
             using (var connection = _connectionHelper.GetConnection().Result)
             {
-                var tableNames = connection.GetTableNames().ToHashSet();
+                var tableNames = connection.GetTableNames();
 
-                var hasDataTable = tableNames.Contains(_dataTableName);
-                var hasIndexTable = tableNames.Contains(_indexTableName);
+                var hasDataTable = tableNames.Any(tableName => _dataTableName.Equals(tableName, StringComparison.InvariantCultureIgnoreCase));
+                var hasIndexTable = tableNames.Any(tableName => _indexTableName.Equals(tableName, StringComparison.InvariantCultureIgnoreCase));
 
                 if (hasDataTable && hasIndexTable)
                 {
@@ -121,7 +121,7 @@ namespace Rebus.Oracle.Sagas
             {
                 using (var command = connection.CreateCommand())
                 {
-                    command.InitialLobFetchSize=-1;
+                    command.InitialLobFetchSize = -1;
                     if (propertyName == IdPropertyName)
                     {
                         command.CommandText = $@"
@@ -135,8 +135,8 @@ namespace Rebus.Oracle.Sagas
                     {
                         command.CommandText = $@"
                             SELECT s.data
-                                FROM Saga_Data s
-                                JOIN Saga_Index i on s.id = i.saga_id 
+                                FROM {_dataTableName} s
+                                JOIN {_indexTableName} i on s.id = i.saga_id 
                                 WHERE i.saga_type = :saga_type AND  i.key = :key AND i.value = :value
                             ";
                         command.Parameters.Add(new OracleParameter("key", OracleDbType.NVarChar, propertyName, ParameterDirection.Input));
@@ -360,12 +360,11 @@ namespace Rebus.Oracle.Sagas
                 // generate batch insert with SQL for each entry in the index
                 command.CommandText =
                     $@"INSERT INTO {_indexTableName} (saga_type, key, value, saga_id)  VALUES (:saga_type, :key, :value, :saga_id)";
-                command.ExecuteArray(parameters.Count);
                 command.Parameters.Add(new OracleParameter("saga_type", OracleDbType.NVarChar, parameters.Select(x => x.SagaType).ToArray(), ParameterDirection.Input));
                 command.Parameters.Add(new OracleParameter("key", OracleDbType.NVarChar, parameters.Select(x => x.PropertyName).ToArray(), ParameterDirection.Input));
                 command.Parameters.Add(new OracleParameter("value", OracleDbType.NVarChar, parameters.Select(x => x.PropertyValue).ToArray(), ParameterDirection.Input));
                 command.Parameters.Add(new OracleParameter("saga_id", OracleDbType.Raw, parameters.Select(x => x.SagaId).ToArray(), ParameterDirection.Input));
-                await command.ExecuteNonQueryAsync();
+                command.ExecuteArray(parameters.Count);
             }
 
         }
