@@ -261,10 +261,10 @@ namespace Rebus.Oracle.Sagas
                 // next, update or insert the saga
                 using (var command = connection.CreateCommand())
                 {
-                    command.Parameters.Add("id", OracleDbType.Raw).Value = sagaData.Id.ToByteArray();
+                    command.Parameters.Add("id", OracleDbType.Raw).Value = sagaData.Id;
                     command.Parameters.Add("current_revision", OracleDbType.Int64).Value = revisionToUpdate;
                     command.Parameters.Add("next_revision", OracleDbType.Int64).Value = nextRevision;
-                    command.Parameters.Add("data", OracleDbType.Raw).Value = _objectSerializer.Serialize(sagaData);
+                    command.Parameters.Add("data", OracleDbType.Blob).Value = _objectSerializer.Serialize(sagaData);
 
                     command.CommandText =
                         $@"
