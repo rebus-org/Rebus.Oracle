@@ -10,10 +10,10 @@
     <Authors>mookid8000</Authors>
     <PackageLicenseUrl>https://raw.githubusercontent.com/rebus-org/Rebus/master/LICENSE.md</PackageLicenseUrl>
     <PackageProjectUrl>http://mookid.dk/oncode/rebus</PackageProjectUrl>
-    <Copyright>Copyright 2012-2016</Copyright>
-    <PackageTags>rebus sql Oracle</PackageTags>
+    <Copyright>Copyright 2018</Copyright>
+    <PackageTags>rebus sql oracle</PackageTags>
     <PackageIconUrl>https://github.com/mookid8000/Rebus/raw/master/artwork/little_rebusbus2_copy-200x200.png</PackageIconUrl>
-    <RepositoryUrl>https://github.com/rebus-org/Rebus</RepositoryUrl>
+    <RepositoryUrl>https://github.com/rebus-org/Rebus.Oracle</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">

@@ -1,16 +1,26 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
+    <OutputType>Library</OutputType>
     <Description>Rebus.Oracle.Devart</Description>
     <VersionPrefix>1.0.0</VersionPrefix>
     <Authors>Jeffrey Wilbur</Authors>
     <TargetFramework>netstandard2.0</TargetFramework>
+
     <GenerateAssemblyTitleAttribute>false</GenerateAssemblyTitleAttribute>
     <GenerateAssemblyDescriptionAttribute>false</GenerateAssemblyDescriptionAttribute>
     <GenerateAssemblyConfigurationAttribute>false</GenerateAssemblyConfigurationAttribute>
     <GenerateAssemblyCompanyAttribute>false</GenerateAssemblyCompanyAttribute>
     <GenerateAssemblyProductAttribute>false</GenerateAssemblyProductAttribute>
     <GenerateAssemblyCopyrightAttribute>false</GenerateAssemblyCopyrightAttribute>
+
+    <RepositoryType>git</RepositoryType>
+
+    <PackageTags>rebus sql oracle devart</PackageTags>
+    <PackageLicenseUrl>https://raw.githubusercontent.com/rebus-org/Rebus/master/LICENSE.md</PackageLicenseUrl>
+    <PackageProjectUrl>http://mookid.dk/oncode/rebus</PackageProjectUrl>
+    <PackageIconUrl>https://github.com/mookid8000/Rebus/raw/master/artwork/little_rebusbus2_copy-200x200.png</PackageIconUrl>
+    <RepositoryUrl>https://github.com/rebus-org/Rebus.Oracle</RepositoryUrl>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Devart.Data.Oracle" Version="9.5.454" />
