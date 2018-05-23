@@ -9,7 +9,7 @@
 
 * Fix table name comparison - thanks [martywang]
 
-## 1.0.0-a6
+## 1.0.0-a7
 
 * Change saga data type from raw to blob - thanks [gonzoga]
 
