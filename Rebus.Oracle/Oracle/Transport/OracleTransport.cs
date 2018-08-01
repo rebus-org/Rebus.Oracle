@@ -11,7 +11,6 @@ using Oracle.ManagedDataAccess.Types;
 using Rebus.Bus;
 using Rebus.Exceptions;
 using Rebus.Extensions;
-using Rebus.Internals;
 using Rebus.Logging;
 using Rebus.Messages;
 using Rebus.Serialization;

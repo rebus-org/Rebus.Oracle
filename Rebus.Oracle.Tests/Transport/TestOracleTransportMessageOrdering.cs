@@ -14,6 +14,7 @@ using Rebus.Transport;
 namespace Rebus.Oracle.Tests.Transport
 {
     [TestFixture]
+    [Ignore("This one should probably be enabled some time later")]
     public class TestOracleTransportMessageOrdering : FixtureBase
     {
         const string QueueName = "test-ordering";
