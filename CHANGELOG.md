@@ -13,6 +13,10 @@
 
 * Change saga data type from raw to blob - thanks [gonzoga]
 
+## 2.0.0-a1
+
+* Update to new Oracle driver and target .NET Standard 2.0 - thanks [gonzoga]
+
 ---
 
 [dtabuenc]: https://github.com/dtabuenc
