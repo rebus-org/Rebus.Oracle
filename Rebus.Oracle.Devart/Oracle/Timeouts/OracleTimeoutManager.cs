@@ -43,7 +43,7 @@ namespace Rebus.Oracle.Timeouts
         /// </summary>
         public async Task Defer(DateTimeOffset approximateDueTime, Dictionary<string, string> headers, byte[] body)
         {
-            using (var connection = await _connectionHelper.GetConnection())
+            using (var connection = _connectionHelper.GetConnection())
             {
                 using (var command = connection.CreateCommand())
                 {
@@ -64,7 +64,7 @@ namespace Rebus.Oracle.Timeouts
         /// </summary>
         public async Task<DueMessagesResult> GetDueMessages()
         {
-            var connection = await _connectionHelper.GetConnection();
+            var connection = _connectionHelper.GetConnection();
 
             try
             {
@@ -126,7 +126,7 @@ namespace Rebus.Oracle.Timeouts
         /// </summary>
         public void EnsureTableIsCreated()
         {
-            using (var connection = _connectionHelper.GetConnection().Result)
+            using (var connection = _connectionHelper.GetConnection())
             {
                 var tableNames = connection.GetTableNames();
 
@@ -148,7 +148,7 @@ namespace Rebus.Oracle.Timeouts
                             CONSTRAINT {_tableName}_pk PRIMARY KEY(id)
                          )";
 
-                    command.ExecuteNonQuery();
+                    command.ExecuteNonQueryAsync();
                 }
                 using (var command = connection.CreateCommand())
                 {

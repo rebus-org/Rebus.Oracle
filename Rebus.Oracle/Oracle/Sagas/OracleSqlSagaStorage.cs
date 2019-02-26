@@ -47,7 +47,7 @@ namespace Rebus.Oracle.Sagas
         /// </summary>
         public void EnsureTablesAreCreated()
         {
-            using (var connection = _connectionHelper.GetConnection().Result)
+            using (var connection = _connectionHelper.GetConnection())
             {
                 var tableNames = connection.GetTableNames().ToHashSet();
 
@@ -117,7 +117,7 @@ namespace Rebus.Oracle.Sagas
         /// </summary>
         public async Task<ISagaData> Find(Type sagaDataType, string propertyName, object propertyValue)
         {
-            using (var connection = await _connectionHelper.GetConnection())
+            using (var connection = _connectionHelper.GetConnection())
             {
                 using (var command = connection.CreateCommand())
                 {
@@ -145,8 +145,7 @@ namespace Rebus.Oracle.Sagas
                         command.Parameters.Add(new OracleParameter("value", OracleDbType.NVarchar2, (propertyValue ?? "").ToString(), ParameterDirection.Input));
                     }
 
-                    var data = (byte[]) command.ExecuteScalar();
-                    //var data = command.ExecuteScalar();
+                    var data = (byte[]) await command.ExecuteScalarAsync();
 
                     if (data == null) return null;
 
@@ -199,7 +198,7 @@ namespace Rebus.Oracle.Sagas
                     $"Attempted to insert saga data with ID {sagaData.Id} and revision {sagaData.Revision}, but revision must be 0 on first insert!");
             }
 
-            using (var connection = await _connectionHelper.GetConnection())
+            using (var connection = _connectionHelper.GetConnection())
             {
                 using (var command = connection.CreateCommand())
                 {
@@ -217,7 +216,7 @@ namespace Rebus.Oracle.Sagas
 
                     try
                     {
-                        command.ExecuteNonQuery();
+                        await command.ExecuteNonQueryAsync();
                     }
                     catch (OracleException exception)
                     {
@@ -244,7 +243,7 @@ namespace Rebus.Oracle.Sagas
         /// </summary>
         public async Task Update(ISagaData sagaData, IEnumerable<ISagaCorrelationProperty> correlationProperties)
         {
-            using (var connection = await _connectionHelper.GetConnection())
+            using (var connection = _connectionHelper.GetConnection())
             {
                 var revisionToUpdate = sagaData.Revision;
 
@@ -302,7 +301,7 @@ namespace Rebus.Oracle.Sagas
         /// </summary>
         public async Task Delete(ISagaData sagaData)
         {
-            using (var connection = await _connectionHelper.GetConnection())
+            using (var connection = _connectionHelper.GetConnection())
             {
                 using (var command = connection.CreateCommand())
                 {

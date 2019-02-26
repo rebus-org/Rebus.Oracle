@@ -4,7 +4,6 @@ using System.Data;
 using System.Linq;
 using System.Threading.Tasks;
 using Oracle.ManagedDataAccess.Client;
-using Rebus.Extensions;
 using Rebus.Logging;
 using Rebus.Subscriptions;
 
@@ -40,7 +39,7 @@ namespace Rebus.Oracle.Subscriptions
         /// </summary>
         public void EnsureTableIsCreated()
         {
-            using (var connection = _connectionHelper.GetConnection().Result)
+            using (var connection = _connectionHelper.GetConnection())
             {
                 var tableNames = connection.GetTableNames();
 
@@ -69,7 +68,7 @@ CREATE TABLE {_tableName} (
         /// </summary>
         public async Task<string[]> GetSubscriberAddresses(string topic)
         {
-            using (var connection = await _connectionHelper.GetConnection())
+            using (var connection = _connectionHelper.GetConnection())
             using (var command = connection.CreateCommand())
             {
                 command.CommandText = $@"select address from {_tableName} where topic = :topic";
@@ -79,7 +78,7 @@ CREATE TABLE {_tableName} (
 
                 var endpoints = new List<string>();
 
-                using (var reader = command.ExecuteReader())
+                using (var reader = await command.ExecuteReaderAsync())
                 {
                     while (reader.Read())
                     {
@@ -96,7 +95,7 @@ CREATE TABLE {_tableName} (
         /// </summary>
         public async Task RegisterSubscriber(string topic, string subscriberAddress)
         {
-            using (var connection = await _connectionHelper.GetConnection())
+            using (var connection = _connectionHelper.GetConnection())
             using (var command = connection.CreateCommand())
             {
                 command.CommandText =
@@ -108,7 +107,7 @@ CREATE TABLE {_tableName} (
 
                 try
                 {
-                    command.ExecuteNonQuery();
+                    await command.ExecuteNonQueryAsync();
                 }
                 catch (OracleException exception) when (exception.Number == UniqueKeyViolation)
                 {
@@ -124,7 +123,8 @@ CREATE TABLE {_tableName} (
         /// </summary>
         public async Task UnregisterSubscriber(string topic, string subscriberAddress)
         {
-            using (var connection = await _connectionHelper.GetConnection())
+            await Task.CompletedTask;
+            using (var connection = _connectionHelper.GetConnection())
             using (var command = connection.CreateCommand())
             {
                 command.CommandText =
@@ -136,7 +136,7 @@ CREATE TABLE {_tableName} (
 
                 try
                 {
-                    command.ExecuteNonQuery();
+                    await command.ExecuteNonQueryAsync();
                 }
                 catch (OracleException exception)
                 {

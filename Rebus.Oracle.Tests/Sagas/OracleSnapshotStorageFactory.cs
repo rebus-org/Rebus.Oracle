@@ -27,7 +27,7 @@ namespace Rebus.Oracle.Tests.Sagas
 
         public IEnumerable<SagaDataSnapshot> GetAllSnapshots()
         {
-            using (var connection = OracleTestHelper.ConnectionHelper.GetConnection().Result)
+            using (var connection = OracleTestHelper.ConnectionHelper.GetConnection())
             {
                 using (var command = connection.CreateCommand())
                 {
