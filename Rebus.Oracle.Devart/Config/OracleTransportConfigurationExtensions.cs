@@ -20,9 +20,9 @@ namespace Rebus.Config
         /// store messages, and the "queue" specified by <paramref name="inputQueueName"/> will be used when querying for messages.
         /// The message table will automatically be created if it does not exist.
         /// </summary>
-        public static void UseOracle(this StandardConfigurer<ITransport> configurer, string connectionStringOrConnectionOrConnectionStringName, string tableName, string inputQueueName)
+        public static void UseOracle(this StandardConfigurer<ITransport> configurer, string connectionStringOrConnectionOrConnectionStringName, string tableName, string inputQueueName, bool enlistInAmbientTransaction = false)
         {
-            Configure(configurer, loggerFactory => new OracleConnectionHelper(connectionStringOrConnectionOrConnectionStringName), tableName, inputQueueName);
+            Configure(configurer, loggerFactory => new OracleConnectionHelper(connectionStringOrConnectionOrConnectionStringName, enlistInAmbientTransaction), tableName, inputQueueName);
         }
 
         /// <summary>
@@ -30,9 +30,9 @@ namespace Rebus.Config
         /// The table specified by <paramref name="tableName"/> will be used to store messages.
         /// The message table will automatically be created if it does not exist.
         /// </summary>
-        public static void UseOracleAsOneWayClient(this StandardConfigurer<ITransport> configurer, string connectionStringOrConnectionStringName, string tableName)
+        public static void UseOracleAsOneWayClient(this StandardConfigurer<ITransport> configurer, string connectionStringOrConnectionStringName, string tableName, bool enlistInAmbientTransaction = false)
         {
-            Configure(configurer, loggerFactory => new OracleConnectionHelper(connectionStringOrConnectionStringName), tableName, null);
+            Configure(configurer, loggerFactory => new OracleConnectionHelper(connectionStringOrConnectionStringName, enlistInAmbientTransaction), tableName, null);
 
             OneWayClientBackdoor.ConfigureOneWayClient(configurer);
         }

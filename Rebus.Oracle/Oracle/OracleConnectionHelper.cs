@@ -16,9 +16,20 @@ namespace Rebus.Oracle
         /// <summary>
         /// Constructs this thingie
         /// </summary>
+        /// <param name="connectionString">Connection string.</param>
         public OracleConnectionHelper(string connectionString)
         {
             _connectionString = connectionString;
+        }
+
+        /// <summary>
+        /// Constructs this thingie
+        /// </summary>
+        /// <param name="connectionString">Connection string.</param>
+        /// <param name="enlistInAmbientTransaction">If <c>true</c> the connection will be enlisted in the ambient transaction if it exists, else it will create an OracleTransaction and enlist in it</param>
+        public OracleConnectionHelper(string connectionString, bool enlistInAmbientTransaction) 
+            : this(connectionString, null, enlistInAmbientTransaction)
+        {
         }
 
         /// <summary>
