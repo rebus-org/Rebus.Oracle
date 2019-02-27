@@ -86,7 +86,7 @@ namespace Rebus.Oracle.Sagas
                             CONSTRAINT {_dataTableName}_pk PRIMARY KEY(id)
                         )";
 
-                    command.ExecuteNonQueryAsync();
+                    command.ExecuteNonQuery();
                 }
 
                 using (var command = connection.CreateCommand())
