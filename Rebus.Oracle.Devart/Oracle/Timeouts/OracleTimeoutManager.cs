@@ -148,7 +148,7 @@ namespace Rebus.Oracle.Timeouts
                             CONSTRAINT {_tableName}_pk PRIMARY KEY(id)
                          )";
 
-                    command.ExecuteNonQueryAsync();
+                    command.ExecuteNonQuery();
                 }
                 using (var command = connection.CreateCommand())
                 {
