@@ -56,6 +56,7 @@ namespace Rebus.Oracle.Tests.Integration
 
             _activator.Handle<string>(async message =>
             {
+                await Task.CompletedTask;
                 Interlocked.Increment(ref receivedMessageCount);
                 Console.WriteLine("w00000t! Got message: {0}", message);
                 gotTheMessage.Set();
@@ -80,6 +81,7 @@ namespace Rebus.Oracle.Tests.Integration
 
             _activator.Handle<string>(async message =>
             {
+                await Task.CompletedTask;
                 Interlocked.Increment(ref receivedMessageCount);
                 Console.WriteLine("w00000t! Got message: {0}", message);
                 gotTheMessage.Set();
