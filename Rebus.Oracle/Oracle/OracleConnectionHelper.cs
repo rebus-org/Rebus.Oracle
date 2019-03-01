@@ -52,62 +52,48 @@ namespace Rebus.Oracle
         /// </summary>
         public OracleDbConnection GetConnection()
         {
-            OracleConnection connection = null;
-            OracleTransaction transaction = null;
+            var connection = new OracleConnection(_connectionString);
             try
             {
-                if (!_enlistInAmbientTransaction)
-                {
-                    connection = CreateOracleConnectionSuppressingAPossibleAmbientTransaction();
-                    transaction = connection.BeginTransaction(IsolationLevel.ReadCommitted);
-                }
-                else
-                {
-                    connection = CreateOracleConnectionInAPossiblyAmbientTransaction();
-                }
-
-                return new OracleDbConnection(connection, transaction);
+                return !_enlistInAmbientTransaction
+                    ? CreateOracleDbConnection(connection)
+                    : CreateOracleDbConnectionInAPossiblyAmbientTransaction(connection);
             }
             catch (Exception)
             {
-                connection?.Dispose();
+                connection.Dispose();
                 throw;
             }
         }
 
-        private OracleConnection CreateOracleConnectionInAPossiblyAmbientTransaction()
+        private OracleDbConnection CreateOracleDbConnectionInAPossiblyAmbientTransaction(OracleConnection connection)
         {
-            var connection = new OracleConnection(_connectionString);
-
             _additionalConnectionSetupCallback?.Invoke(connection);
 
             // do not use Async here! it would cause the tx scope to be disposed on another thread than the one that created it
             connection.Open();
 
-            var transaction = System.Transactions.Transaction.Current;
-            if (transaction != null)
+            var ambientTransaction = System.Transactions.Transaction.Current;
+            if (ambientTransaction != null)
             {
-                connection.EnlistTransaction(transaction);
+                connection.EnlistTransaction(ambientTransaction);
+                return new OracleDbConnection(connection, null);
             }
 
-            return connection;
+            var transaction = connection.BeginTransaction(IsolationLevel.ReadCommitted);
+            return new OracleDbConnection(connection, transaction);
         }
 
-        private OracleConnection CreateOracleConnectionSuppressingAPossibleAmbientTransaction()
+        private OracleDbConnection CreateOracleDbConnection(OracleConnection connection)
         {
-            OracleConnection connection;
+            _additionalConnectionSetupCallback?.Invoke(connection);
 
-            using (new System.Transactions.TransactionScope(System.Transactions.TransactionScopeOption.Suppress))
-            {
-                connection = new OracleConnection(_connectionString);
+            // do not use Async here! it would cause the tx scope to be disposed on another thread than the one that created it
+            connection.Open();
 
-                _additionalConnectionSetupCallback?.Invoke(connection);
+            var currentTransaction = connection.BeginTransaction(IsolationLevel.ReadCommitted);
 
-                // do not use Async here! it would cause the tx scope to be disposed on another thread than the one that created it
-                connection.Open();
-            }
-
-            return connection;
+            return new OracleDbConnection(connection, currentTransaction);
         }
     }
 }
