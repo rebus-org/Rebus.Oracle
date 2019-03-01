@@ -53,6 +53,12 @@ namespace Rebus.Oracle
         public OracleDbConnection GetConnection()
         {
             var connection = new OracleConnection(_connectionString);
+
+            _additionalConnectionSetupCallback?.Invoke(connection);
+
+            // do not use Async here! it would cause the tx scope to be disposed on another thread than the one that created it
+            connection.Open();
+
             try
             {
                 return !_enlistInAmbientTransaction
@@ -68,11 +74,6 @@ namespace Rebus.Oracle
 
         private OracleDbConnection CreateOracleDbConnectionInAPossiblyAmbientTransaction(OracleConnection connection)
         {
-            _additionalConnectionSetupCallback?.Invoke(connection);
-
-            // do not use Async here! it would cause the tx scope to be disposed on another thread than the one that created it
-            connection.Open();
-
             var ambientTransaction = System.Transactions.Transaction.Current;
             if (ambientTransaction != null)
             {
@@ -86,13 +87,7 @@ namespace Rebus.Oracle
 
         private OracleDbConnection CreateOracleDbConnection(OracleConnection connection)
         {
-            _additionalConnectionSetupCallback?.Invoke(connection);
-
-            // do not use Async here! it would cause the tx scope to be disposed on another thread than the one that created it
-            connection.Open();
-
             var currentTransaction = connection.BeginTransaction(IsolationLevel.ReadCommitted);
-
             return new OracleDbConnection(connection, currentTransaction);
         }
     }
