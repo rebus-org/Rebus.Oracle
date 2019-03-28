@@ -5,7 +5,7 @@
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>Rebus.Oracle.Tests</RootNamespace>
     <AssemblyName>Rebus.Oracle.Tests</AssemblyName>
-    <TargetFramework>netstandard2.0</TargetFramework>
+    <TargetFramework>netcoreapp2.2</TargetFramework>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
@@ -29,6 +29,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Rebus.Oracle\Rebus.Oracle.csproj" />
     <PackageReference Include="nunit" Version="3.7.1" />
+    <PackageReference Include="NUnit3TestAdapter" Version="3.13.0" />
     <PackageReference Include="rebus" Version="4.2.1" />
     <PackageReference Include="rebus.tests.contracts" Version="4.0.0" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="15.5.0" />

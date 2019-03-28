@@ -1,5 +1,4 @@
 using System;
-using System.Threading.Tasks;
 using Devart.Data.Oracle;
 
 // ReSharper disable EmptyGeneralCatchClause
@@ -23,7 +22,7 @@ namespace Rebus.Oracle
         public OracleDbConnection(OracleConnection currentConnection, OracleTransaction currentTransaction)
         {
             _currentConnection = currentConnection ?? throw new ArgumentNullException(nameof(currentConnection));
-            _currentTransaction = currentTransaction ?? throw new ArgumentNullException(nameof(currentTransaction));
+            _currentTransaction = currentTransaction;
         }
 
         /// <summary>

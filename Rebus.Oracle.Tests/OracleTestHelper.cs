@@ -18,7 +18,7 @@ namespace Rebus.Oracle.Tests
 
         public static void DropTableAndSequence(string tableName)
         {
-            using (var connection = OracleConnectionHelper.GetConnection().Result)
+            using (var connection = OracleConnectionHelper.GetConnection())
             {
                 using (var comand = connection.CreateCommand())
                 {

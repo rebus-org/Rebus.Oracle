@@ -204,7 +204,7 @@ namespace Rebus.Oracle.Transport
 
             while (true)
             {
-                using (var connection = await _connectionHelper.GetConnection())
+                using (var connection = _connectionHelper.GetConnection())
                 {
                     int affectedRows;
 
@@ -258,7 +258,7 @@ namespace Rebus.Oracle.Transport
 
         void CreateSchema()
         {
-            using (var connection = _connectionHelper.GetConnection().Result)
+            using (var connection = _connectionHelper.GetConnection())
             {
                 var tableNames = connection.GetTableNames();
 
@@ -378,7 +378,8 @@ END;
                 .GetOrAdd(CurrentConnectionKey,
                     async () =>
                     {
-                        var dbConnection = await _connectionHelper.GetConnection();
+                        await Task.CompletedTask;
+                        var dbConnection = _connectionHelper.GetConnection();
                         var connectionWrapper = new ConnectionWrapper(dbConnection);
                         context.OnCommitted(() =>
                         {
