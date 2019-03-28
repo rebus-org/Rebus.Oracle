@@ -13,9 +13,10 @@
 
 * Change saga data type from raw to blob - thanks [gonzoga]
 
-## 2.0.0-a1
+## 2.0.0-a2
 
 * Update to new Oracle driver and target .NET Standard 2.0 - thanks [gonzoga]
+* Add ability to enlist in `TransactionScope` - thanks [thomasdc]
 
 ---
 
@@ -23,3 +24,4 @@
 [gonzoga]: https://github.com/gonzoga
 [jeffreywilbur]: https://github.com/jeffreywilbur
 [martywang]: https://github.com/martywang
+[thomasdc]: https://github.com/thomasdc
