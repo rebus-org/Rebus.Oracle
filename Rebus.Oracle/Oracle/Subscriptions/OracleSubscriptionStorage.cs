@@ -52,9 +52,9 @@ namespace Rebus.Oracle.Subscriptions
                     command.CommandText =
                         $@"
 CREATE TABLE {_tableName} (
-	topic VARCHAR(200) NOT NULL,
-	address VARCHAR(200) NOT NULL,
-	PRIMARY KEY (topic,address)
+    topic VARCHAR(200) NOT NULL,
+    address VARCHAR(200) NOT NULL,
+    PRIMARY KEY (topic,address)
 )";
                     command.ExecuteNonQuery();
                 }
