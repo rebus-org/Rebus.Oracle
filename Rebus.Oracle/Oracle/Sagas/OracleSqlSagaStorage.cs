@@ -115,7 +115,7 @@ namespace Rebus.Oracle.Sagas
         /// Finds an already-existing instance of the given saga data type that has a property with the given <paramref name="propertyName" />
         /// whose value matches <paramref name="propertyValue" />. Returns null if no such instance could be found
         /// </summary>
-        public async Task<ISagaData> Find(Type sagaDataType, string propertyName, object propertyValue)
+        public Task<ISagaData> Find(Type sagaDataType, string propertyName, object propertyValue)
         {
             using (var connection = _connectionHelper.GetConnection())
             {
@@ -145,9 +145,9 @@ namespace Rebus.Oracle.Sagas
                         command.Parameters.Add(new OracleParameter("value", OracleDbType.NVarchar2, (propertyValue ?? "").ToString(), ParameterDirection.Input));
                     }
 
-                    var data = (byte[]) await command.ExecuteScalarAsync();
+                    var data = (byte[]) command.ExecuteScalar();
 
-                    if (data == null) return null;
+                    if (data == null) return Task.FromResult<ISagaData>(null);
 
                     try
                     {
@@ -155,10 +155,10 @@ namespace Rebus.Oracle.Sagas
 
                         if (!sagaDataType.IsInstanceOfType(sagaData))
                         {
-                            return null;
+                            return Task.FromResult<ISagaData>(null);
                         }
 
-                        return sagaData;
+                        return Task.FromResult(sagaData);
                     }
                     catch (Exception exception)
                     {
@@ -184,7 +184,7 @@ namespace Rebus.Oracle.Sagas
         /// Inserts the given saga data as a new instance. Throws a <see cref="T:Rebus.Exceptions.ConcurrencyException" /> if another saga data instance
         /// already exists with a correlation property that shares a value with this saga data.
         /// </summary>
-        public async Task Insert(ISagaData sagaData, IEnumerable<ISagaCorrelationProperty> correlationProperties)
+        public Task Insert(ISagaData sagaData, IEnumerable<ISagaCorrelationProperty> correlationProperties)
         {
             if (sagaData.Id == Guid.Empty)
             {
@@ -216,7 +216,7 @@ namespace Rebus.Oracle.Sagas
 
                     try
                     {
-                        await command.ExecuteNonQueryAsync();
+                        command.ExecuteNonQuery();
                     }
                     catch (OracleException exception)
                     {
@@ -229,10 +229,11 @@ namespace Rebus.Oracle.Sagas
 
                 if (propertiesToIndex.Any())
                 {
-                    await CreateIndex(sagaData, connection, propertiesToIndex);
+                    CreateIndex(sagaData, connection, propertiesToIndex);
                 }
 
                 connection.Complete();
+                return Task.CompletedTask;
             }
         }
 
@@ -241,7 +242,7 @@ namespace Rebus.Oracle.Sagas
         /// saga data instance exists with a correlation property that shares a value with this saga data, or if the saga data
         /// instance no longer exists.
         /// </summary>
-        public async Task Update(ISagaData sagaData, IEnumerable<ISagaCorrelationProperty> correlationProperties)
+        public Task Update(ISagaData sagaData, IEnumerable<ISagaCorrelationProperty> correlationProperties)
         {
             using (var connection = _connectionHelper.GetConnection())
             {
@@ -257,7 +258,7 @@ namespace Rebus.Oracle.Sagas
                     command.BindByName = true;
                     command.CommandText = $@"DELETE FROM {_indexTableName} WHERE saga_id = :id";
                     command.Parameters.Add("id", OracleDbType.Raw).Value = sagaData.Id;
-                    await command.ExecuteNonQueryAsync();
+                    command.ExecuteNonQuery();
                 }
 
                 // next, update or insert the saga
@@ -276,7 +277,7 @@ namespace Rebus.Oracle.Sagas
                             WHERE id = :id AND revision = :current_revision
                         ";
 
-                    var rows = await command.ExecuteNonQueryAsync();
+                    var rows = command.ExecuteNonQuery();
 
                     if (rows == 0)
                     {
@@ -289,17 +290,18 @@ namespace Rebus.Oracle.Sagas
 
                 if (propertiesToIndex.Any())
                 {
-                    await CreateIndex(sagaData, connection, propertiesToIndex);
+                    CreateIndex(sagaData, connection, propertiesToIndex);
                 }
 
                 connection.Complete();
+                return Task.CompletedTask;
             }
         }
 
         /// <summary>
         /// Deletes the saga data instance, throwing a <see cref="T:Rebus.Exceptions.ConcurrencyException" /> if the instance no longer exists
         /// </summary>
-        public async Task Delete(ISagaData sagaData)
+        public Task Delete(ISagaData sagaData)
         {
             using (var connection = _connectionHelper.GetConnection())
             {
@@ -315,7 +317,7 @@ namespace Rebus.Oracle.Sagas
                     command.Parameters.Add("id", OracleDbType.Raw).Value = sagaData.Id;
                     command.Parameters.Add("current_revision", OracleDbType.Int64).Value = sagaData.Revision;
 
-                    var rows = await command.ExecuteNonQueryAsync();
+                    var rows = command.ExecuteNonQuery();
 
                     if (rows == 0)
                     {
@@ -335,16 +337,18 @@ namespace Rebus.Oracle.Sagas
                     command.BindByName = true;
                     command.Parameters.Add("id", OracleDbType.Raw).Value = sagaData.Id;
 
-                    await command.ExecuteNonQueryAsync();
+                    command.ExecuteNonQuery();
                 }
 
                 connection.Complete();
             }
 
             sagaData.Revision++;
+
+            return Task.CompletedTask;
         }
 
-        async Task CreateIndex(ISagaData sagaData, OracleDbConnection connection,
+        void CreateIndex(ISagaData sagaData, OracleDbConnection connection,
             IEnumerable<KeyValuePair<string, string>> propertiesToIndex)
         {
             var sagaTypeName = GetSagaTypeName(sagaData.GetType());
@@ -370,9 +374,8 @@ namespace Rebus.Oracle.Sagas
                 command.Parameters.Add(new OracleParameter("key", OracleDbType.NVarchar2, parameters.Select(x => x.PropertyName).ToArray(), ParameterDirection.Input));
                 command.Parameters.Add(new OracleParameter("value", OracleDbType.NVarchar2, parameters.Select(x => x.PropertyValue).ToArray(), ParameterDirection.Input));
                 command.Parameters.Add(new OracleParameter("saga_id", OracleDbType.Raw, parameters.Select(x => x.SagaId).ToArray(), ParameterDirection.Input));
-                await command.ExecuteNonQueryAsync();
+                command.ExecuteNonQuery();
             }
-
         }
 
         string GetSagaTypeName(Type sagaDataType)
