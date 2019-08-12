@@ -31,7 +31,7 @@ namespace Rebus.Oracle.Sagas
         /// <summary>
         /// Saves the <paramref name="sagaData"/> snapshot and the accompanying <paramref name="sagaAuditMetadata"/>
         /// </summary>
-        public async Task Save(ISagaData sagaData, Dictionary<string, string> sagaAuditMetadata)
+        public Task Save(ISagaData sagaData, Dictionary<string, string> sagaAuditMetadata)
         {
             using (var connection = _connectionHelper.GetConnection())
             {
@@ -47,13 +47,14 @@ namespace Rebus.Oracle.Sagas
                     command.Parameters.Add("id", OracleDbType.Raw).Value = sagaData.Id;
                     command.Parameters.Add("revision", OracleDbType.Int64).Value = sagaData.Revision;
                     command.Parameters.Add("data", OracleDbType.Blob).Value = _objectSerializer.Serialize(sagaData);
-                    command.Parameters.Add("metadata", OracleDbType.Clob).Value =
-                    _dictionarySerializer.SerializeToString(sagaAuditMetadata);
+                    command.Parameters.Add("metadata", OracleDbType.Clob).Value = 
+                        _dictionarySerializer.SerializeToString(sagaAuditMetadata);
 
-                    await command.ExecuteNonQueryAsync();
+                    command.ExecuteNonQuery();
                 }
                 
                 connection.Complete();
+                return Task.CompletedTask;
             }
         }
 
