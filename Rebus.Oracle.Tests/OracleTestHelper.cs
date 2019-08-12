@@ -57,8 +57,11 @@ namespace Rebus.Oracle.Tests
 
         static string GetConnectionStringForDatabase(string databaseName)
         {
+            const string dataSource = "(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=localhost)(PORT=1521))(CONNECT_DATA=(SERVICE_NAME=ORCLCDB.LOCALDOMAIN)))";
+            const string userId = "rebus";
+            const string password = "rebus";
             return Environment.GetEnvironmentVariable("REBUS_ORACLE")
-                   ?? $"User Id={databaseName}; Password=rebus; Data Source=localhost/xe;";
+                   ?? $"Data Source={dataSource};User Id={userId};Password={password};Pooling=true;";
         }
     }
 }
