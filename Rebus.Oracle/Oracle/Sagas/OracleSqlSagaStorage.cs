@@ -137,7 +137,7 @@ namespace Rebus.Oracle.Sagas
                             SELECT s.data
                                 FROM {_dataTableName} s
                                 JOIN {_indexTableName} i on s.id = i.saga_id 
-                                WHERE i.saga_type = :saga_type AND  i.key = :key AND i.value = :value
+                                WHERE i.saga_type = :saga_type AND i.key = :key AND i.value = :value
                             ";
                         command.BindByName = true;
                         command.Parameters.Add(new OracleParameter("key", OracleDbType.NVarchar2, propertyName, ParameterDirection.Input));
@@ -363,7 +363,7 @@ namespace Rebus.Oracle.Sagas
             {
                 // generate batch insert with SQL for each entry in the index
                 command.CommandText =
-                    $@"INSERT INTO {_indexTableName} (saga_type, key, value, saga_id)  VALUES (:saga_type, :key, :value, :saga_id)";
+                    $@"INSERT INTO {_indexTableName} (saga_type, key, value, saga_id) VALUES (:saga_type, :key, :value, :saga_id)";
                 command.BindByName = true;
                 command.ArrayBindCount = parameters.Count;
                 command.Parameters.Add(new OracleParameter("saga_type", OracleDbType.NVarchar2, parameters.Select(x => x.SagaType).ToArray(), ParameterDirection.Input));

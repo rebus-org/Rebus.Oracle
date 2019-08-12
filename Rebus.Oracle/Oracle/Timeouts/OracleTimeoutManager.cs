@@ -144,10 +144,10 @@ namespace Rebus.Oracle.Timeouts
                     command.CommandText =
                         $@"
                         CREATE TABLE {_tableName} (
-                            id  NUMBER(10) NOT NULL,
+                            id NUMBER(10) NOT NULL,
                             due_time TIMESTAMP(7) WITH TIME ZONE NOT NULL,
                             headers CLOB,
-                            body  BLOB,
+                            body BLOB,
                             CONSTRAINT {_tableName}_pk PRIMARY KEY(id)
                          )";
 
@@ -165,7 +165,7 @@ namespace Rebus.Oracle.Timeouts
                     command.CommandText =
                         $@"
                         CREATE OR REPLACE TRIGGER {_tableName}_on_insert
-                             BEFORE INSERT ON  {_tableName}
+                             BEFORE INSERT ON {_tableName}
                              FOR EACH ROW
                         BEGIN
                             if :new.Id is null then

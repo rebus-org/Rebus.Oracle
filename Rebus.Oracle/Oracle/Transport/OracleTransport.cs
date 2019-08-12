@@ -273,13 +273,13 @@ namespace Rebus.Oracle.Transport
                 ExecuteCommands(connection, $@"
 CREATE TABLE {_tableName}
 (
-	id NUMBER(20) NOT NULL,
-	recipient VARCHAR2(255) NOT NULL,
-	priority NUMBER(20) NOT NULL,
+    id NUMBER(20) NOT NULL,
+    recipient VARCHAR2(255) NOT NULL,
+    priority NUMBER(20) NOT NULL,
     expiration timestamp(7) with time zone NOT NULL,
     visible timestamp(7) with time zone NOT NULL,
-	headers blob NOT NULL,
-	body blob NOT NULL
+    headers blob NOT NULL,
+    body blob NOT NULL
 )
 ----
 ALTER TABLE {_tableName} ADD CONSTRAINT {_tableName}_pk PRIMARY KEY(recipient, priority, id)
@@ -287,7 +287,7 @@ ALTER TABLE {_tableName} ADD CONSTRAINT {_tableName}_pk PRIMARY KEY(recipient, p
 CREATE SEQUENCE {_tableName}_SEQ
 ----
 CREATE OR REPLACE TRIGGER {_tableName}_on_insert
-     BEFORE INSERT ON  {_tableName}
+     BEFORE INSERT ON {_tableName}
      FOR EACH ROW
 BEGIN
     if :new.Id is null then
@@ -297,12 +297,12 @@ END;
 ----
 CREATE INDEX idx_receive_{_tableName} ON {_tableName}
 (
-	recipient ASC,
+    recipient ASC,
     expiration ASC,
     visible ASC
 )
 ----
-create or replace PROCEDURE  rebus_dequeue_{_tableName}(recipientQueue IN varchar, output OUT SYS_REFCURSOR ) AS
+create or replace PROCEDURE rebus_dequeue_{_tableName}(recipientQueue IN varchar, output OUT SYS_REFCURSOR ) AS
   messageId number;
   readCursor SYS_REFCURSOR; 
 begin
@@ -319,7 +319,7 @@ begin
     fetch readCursor into messageId;
     close readCursor;      
   open output for select * from {_tableName} where id = messageId;
-  delete from {_tableName} where  id = messageId;
+  delete from {_tableName} where id = messageId;
 END;
 ");
 
