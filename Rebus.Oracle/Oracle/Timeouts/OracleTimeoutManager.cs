@@ -26,16 +26,18 @@ namespace Rebus.Oracle.Timeouts
         readonly OracleConnectionHelper _connectionHelper;
         readonly string _tableName;
         readonly ILog _log;
+        readonly IRebusTime _rebusTime;
 
         /// <summary>
         /// Constructs the timeout manager
         /// </summary>
-        public OracleTimeoutManager(OracleConnectionHelper connectionHelper, string tableName, IRebusLoggerFactory rebusLoggerFactory)
+        public OracleTimeoutManager(OracleConnectionHelper connectionHelper, string tableName, IRebusLoggerFactory rebusLoggerFactory, IRebusTime rebusTime)
         {
             if (rebusLoggerFactory == null) throw new ArgumentNullException(nameof(rebusLoggerFactory));
             _connectionHelper = connectionHelper ?? throw new ArgumentNullException(nameof(connectionHelper));
             _tableName = tableName ?? throw new ArgumentNullException(nameof(tableName));
             _log = rebusLoggerFactory.GetLogger<OracleTimeoutManager>();
+            _rebusTime = rebusTime ?? throw new ArgumentNullException(nameof(rebusTime));
         }
 
         /// <summary>
@@ -50,7 +52,7 @@ namespace Rebus.Oracle.Timeouts
                     command.CommandText =
                         $@"INSERT INTO {_tableName} (due_time, headers, body) VALUES (:due_time, :headers, :body)"; 
                     command.BindByName = true;
-                    command.Parameters.Add(new OracleParameter("due_time", OracleDbType.TimeStampTZ, approximateDueTime.ToUniversalTime().DateTime, ParameterDirection.Input));
+                    command.Parameters.Add(new OracleParameter("due_time", OracleDbType.TimeStampTZ, approximateDueTime.ToOracleTimeStamp(), ParameterDirection.Input));
                     command.Parameters.Add(new OracleParameter("headers", OracleDbType.Clob, _dictionarySerializer.SerializeToString(headers), ParameterDirection.Input));
                     command.Parameters.Add(new OracleParameter("body", OracleDbType.Blob, body, ParameterDirection.Input));
                     command.ExecuteNonQuery();
@@ -86,7 +88,7 @@ namespace Rebus.Oracle.Timeouts
                         ORDER BY due_time
                         FOR UPDATE";
                     command.BindByName = true;
-                    command.Parameters.Add(new OracleParameter("current_time", OracleDbType.TimeStampTZ, RebusTime.Now.ToUniversalTime().DateTime, ParameterDirection.Input));
+                    command.Parameters.Add(new OracleParameter("current_time", OracleDbType.TimeStampTZ, _rebusTime.Now.ToOracleTimeStamp(), ParameterDirection.Input));
 
                     using (var reader = command.ExecuteReader())
                     {

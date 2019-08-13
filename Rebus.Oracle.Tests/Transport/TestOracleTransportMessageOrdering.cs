@@ -18,6 +18,7 @@ namespace Rebus.Oracle.Tests.Transport
     {
         const string QueueName = "test-ordering";
         const string TableName = "Messages";
+
         protected override void TearDown()
         {
             OracleTestHelper.DropTableAndSequence(TableName);
@@ -97,7 +98,8 @@ namespace Rebus.Oracle.Tests.Transport
                 TableName,
                 QueueName,
                 loggerFactory,
-                asyncTaskFactory
+                asyncTaskFactory,
+                new FakeRebusTime()
             );
 
             transport.EnsureTableIsCreated();

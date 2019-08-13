@@ -18,17 +18,17 @@ namespace Rebus.Oracle.Tests.Transport
     [TestFixture, Category(Categories.Oracle)]
     public class TestOracleTransport : FixtureBase
     {
+        const string QueueName = "input";
         readonly string _tableName = "messages" + TestConfig.Suffix;
         OracleTransport _transport;
-        CancellationToken _cancellationToken;
-        const string QueueName = "input";
+        CancellationToken _cancellationToken;        
 
         protected override void SetUp()
         {
             var consoleLoggerFactory = new ConsoleLoggerFactory(false);
             var asyncTaskFactory = new TplAsyncTaskFactory(consoleLoggerFactory);
             var connectionHelper = new OracleConnectionHelper(OracleTestHelper.ConnectionString);
-            _transport = new OracleTransport(connectionHelper, _tableName, QueueName, consoleLoggerFactory, asyncTaskFactory);
+            _transport = new OracleTransport(connectionHelper, _tableName, QueueName, consoleLoggerFactory, asyncTaskFactory, new FakeRebusTime());
             _transport.EnsureTableIsCreated();
 
             Using(_transport);
@@ -146,9 +146,8 @@ namespace Rebus.Oracle.Tests.Transport
 
             if (kvpsDifferentThanOne.Any())
             {
-                Assert.Fail(@"Oh no! the following IDs were not received exactly once:
-{0}",
-    string.Join(Environment.NewLine, kvpsDifferentThanOne.Select(kvp => $"   {kvp.Key}: {kvp.Value}")));
+                Assert.Fail("Oh no! the following IDs were not received exactly once:\n{0}",
+                            string.Join(Environment.NewLine, kvpsDifferentThanOne.Select(kvp => $"   {kvp.Key}: {kvp.Value}")));
             }
         }
 
