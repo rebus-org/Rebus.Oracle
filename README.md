@@ -13,4 +13,6 @@ Provides an Oracle-based persistence for [Rebus](https://github.com/rebus-org/Re
 
 ---
 
+## How to run tests locally?
 
+Instructions can be found in [Rebus.Oracle.Tests/how_to_run_tests_locally.md](/Rebus.Oracle.Tests/how_to_run_tests_locally.md)
