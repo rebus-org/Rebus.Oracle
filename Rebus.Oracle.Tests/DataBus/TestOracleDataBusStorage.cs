@@ -16,17 +16,19 @@ namespace Rebus.Oracle.Tests.DataBus
     [TestFixture]
     public class TestSqlServerDataBusStorage : FixtureBase
     {
+        readonly string tableName = TestConfig.GetName("data");
         OracleDataBusStorage _storage;
 
         protected override void SetUp()
         {
             var loggerFactory = new ConsoleLoggerFactory(false);
-            var tableName = TestConfig.GetName("data");
-
-            OracleTestHelper.DropTable(tableName);
-
             _storage = new OracleDataBusStorage(OracleTestHelper.ConnectionHelper, tableName, true, loggerFactory, new FakeRebusTime());
             _storage.Initialize();
+        }
+
+        protected override void TearDown()
+        {
+            OracleTestHelper.DropTable(tableName);
         }
 
         [Test]
@@ -40,8 +42,10 @@ You know, that or, uh, His Dudeness, or uh, Duder, or El Duderino if you're not 
 ", 100));
 
             const string dataId = "known-id";
+            var bytes = Encoding.UTF8.GetBytes(longString);
+            int length = bytes.Length;
 
-            using (var source = new MemoryStream(Encoding.UTF8.GetBytes(longString)))
+            using (var source = new MemoryStream(bytes))
             {
                 await _storage.Save(dataId, source);
             }
@@ -63,6 +67,7 @@ You know, that or, uh, His Dudeness, or uh, Duder, or El Duderino if you're not 
                                 using (var destination = new MemoryStream())
                                 {
                                     source.CopyTo(destination);
+                                    Assert.AreEqual(length, destination.Length);
                                 }
                             }
                             catch (Exception exception)
