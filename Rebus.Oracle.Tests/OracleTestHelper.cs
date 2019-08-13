@@ -8,6 +8,7 @@ namespace Rebus.Oracle.Tests
     {
         const int TableDoesNotExist = 942;
         const int SequenceDoesNotExist = 2289;
+        const int ProcedureDoesNotExist = 4043;
         static readonly OracleConnectionHelper OracleConnectionHelper = new OracleConnectionHelper(ConnectionString);
 
         public static string DatabaseName => $"rebus2_test_{TestConfig.Suffix}".TrimEnd('_');
@@ -45,6 +46,24 @@ namespace Rebus.Oracle.Tests
 
         public static void DropTable(string tableName) => DropTable(tableName, dropSequence: false);
         public static void DropTableAndSequence(string tableName) => DropTable(tableName, dropSequence: true);
+
+        public static void DropProcedure(string procedureName)
+        {
+            using (var connection = OracleConnectionHelper.GetConnection())
+            using (var command = connection.CreateCommand())
+            {
+                try
+                {
+                    command.CommandText = "drop procedure " + procedureName;
+                    command.ExecuteNonQuery();
+                    Console.WriteLine($"Dropped oracle procedure '{procedureName}'");                    
+                }
+                catch (OracleException exception) when (exception.Number == ProcedureDoesNotExist)
+                { }
+
+                connection.Complete();
+            }
+        }
 
         static string GetConnectionStringForDatabase(string databaseName)
         {

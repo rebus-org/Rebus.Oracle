@@ -13,27 +13,23 @@ namespace Rebus.Oracle.Tests.Transport
 {
     public class OracleTransportFactory : ITransportFactory
     {
-
-         readonly HashSet<string> _tablesToDrop = new HashSet<string>();
+        readonly string _tableName = ("rebus_messages_" + TestConfig.Suffix).TrimEnd('_');
+        readonly HashSet<string> _tablesToDrop = new HashSet<string>();
         readonly List<IDisposable> _disposables = new List<IDisposable>();
 
-
         [TestFixture, Category(Categories.Oracle)]
-        public class OracleTransportBasicSendReceive : BasicSendReceive<OracleTransportFactory> { }
+        public class OracleTransportBasicSendReceive : BasicSendReceive<OracleTransportFactory> 
+        { }
 
         [TestFixture, Category(Categories.Oracle)]
         public class OracleTransportMessageExpiration : MessageExpiration<OracleTransportFactory> { }
 
-
         public ITransport CreateOneWayClient()
         {
-            var tableName = ("rebus_messages_" + TestConfig.Suffix).TrimEnd('_');
-            _tablesToDrop.Add(tableName);
-
             var consoleLoggerFactory = new ConsoleLoggerFactory(false);
             var connectionHelper = new OracleConnectionHelper(OracleTestHelper.ConnectionString);
             var asyncTaskFactory = new TplAsyncTaskFactory(consoleLoggerFactory);
-            var transport = new OracleTransport(connectionHelper, tableName, null, consoleLoggerFactory, asyncTaskFactory);
+            var transport = new OracleTransport(connectionHelper, _tableName, null, consoleLoggerFactory, asyncTaskFactory);
 
             _disposables.Add(transport);
 
@@ -45,14 +41,10 @@ namespace Rebus.Oracle.Tests.Transport
 
         public ITransport Create(string inputQueueAddress)
         {
-            var tableName = ("rebus_messages_" + TestConfig.Suffix).TrimEnd('_');
-
-            _tablesToDrop.Add(tableName);
-
             var consoleLoggerFactory = new ConsoleLoggerFactory(false);
             var connectionHelper = new OracleConnectionHelper(OracleTestHelper.ConnectionString);
             var asyncTaskFactory = new TplAsyncTaskFactory(consoleLoggerFactory);
-            var transport = new OracleTransport(connectionHelper, tableName, inputQueueAddress, consoleLoggerFactory, asyncTaskFactory);
+            var transport = new OracleTransport(connectionHelper, _tableName, inputQueueAddress, consoleLoggerFactory, asyncTaskFactory);
 
             _disposables.Add(transport);
 
@@ -67,8 +59,8 @@ namespace Rebus.Oracle.Tests.Transport
             _disposables.ForEach(d => d.Dispose());
             _disposables.Clear();
 
-            _tablesToDrop.ForEach(OracleTestHelper.DropTableAndSequence);
-            _tablesToDrop.Clear();
+            OracleTestHelper.DropTableAndSequence(_tableName);
+            OracleTestHelper.DropProcedure("rebus_dequeue_" + _tableName);
         }
     }
 }

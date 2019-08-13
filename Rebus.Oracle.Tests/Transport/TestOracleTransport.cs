@@ -25,7 +25,6 @@ namespace Rebus.Oracle.Tests.Transport
 
         protected override void SetUp()
         {
-            OracleTestHelper.DropTableAndSequence(_tableName);
             var consoleLoggerFactory = new ConsoleLoggerFactory(false);
             var asyncTaskFactory = new TplAsyncTaskFactory(consoleLoggerFactory);
             var connectionHelper = new OracleConnectionHelper(OracleTestHelper.ConnectionString);
@@ -37,6 +36,12 @@ namespace Rebus.Oracle.Tests.Transport
             _transport.Initialize();
             _cancellationToken = new CancellationTokenSource().Token;
 
+        }
+
+        protected override void TearDown()
+        {
+            OracleTestHelper.DropTableAndSequence(_tableName);
+            OracleTestHelper.DropProcedure("rebus_dequeue_" + _tableName);
         }
 
         [Test]

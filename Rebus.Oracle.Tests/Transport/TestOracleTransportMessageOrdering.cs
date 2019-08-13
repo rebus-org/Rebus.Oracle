@@ -18,7 +18,11 @@ namespace Rebus.Oracle.Tests.Transport
     {
         const string QueueName = "test-ordering";
         const string TableName = "Messages";
-        protected override void SetUp() => OracleTestHelper.DropTableAndSequence(TableName);
+        protected override void TearDown()
+        {
+            OracleTestHelper.DropTableAndSequence(TableName);
+            OracleTestHelper.DropProcedure("rebus_dequeue_" + TableName);
+        } 
 
         [Test]
         public async Task DeliversMessagesByVisibleTimeAndNotBeInsertionTime()
