@@ -16,44 +16,35 @@ namespace Rebus.Oracle.Tests
 
         public static OracleConnectionHelper ConnectionHelper => OracleConnectionHelper;
 
-        public static void DropTableAndSequence(string tableName)
+        static void DropTable(string tableName, bool dropSequence)
         {
             using (var connection = OracleConnectionHelper.GetConnection())
+            using (var command = connection.CreateCommand())
             {
-                using (var comand = connection.CreateCommand())
+                try
                 {
-                    comand.CommandText = $@"drop table {tableName}";
-
-                    try
-                    {
-                        comand.ExecuteNonQuery();
-
-                        Console.WriteLine("Dropped oracle table '{0}'", tableName);
-                    }
-                    catch (OracleException exception) when (exception.Number == TableDoesNotExist)
-                    {
-                    }
+                    command.CommandText = "drop table " + tableName;
+                    command.ExecuteNonQuery();
+                    Console.WriteLine($"Dropped oracle table '{tableName}'");                    
                 }
-
-                using (var comand = connection.CreateCommand())
+                catch (OracleException exception) when (exception.Number == TableDoesNotExist)
+                { }
+                
+                try
                 {
-                    comand.CommandText = $@"drop sequence {tableName}_SEQ";
-
-                    try
-                    {
-                        comand.ExecuteNonQuery();
-
-                        Console.WriteLine("Dropped oracle sequence '{0}_SEQ'", tableName);
-                    }
-                    catch (OracleException exception) when (exception.Number ==SequenceDoesNotExist)
-                    {
-                    }
+                    command.CommandText = $"drop sequence {tableName}_SEQ";
+                    command.ExecuteNonQuery();
+                    Console.WriteLine("Dropped oracle sequence '{0}_SEQ'", tableName);
                 }
-
+                catch (OracleException exception) when (exception.Number == SequenceDoesNotExist)
+                { }
 
                 connection.Complete();
             }
         }
+
+        public static void DropTable(string tableName) => DropTable(tableName, dropSequence: false);
+        public static void DropTableAndSequence(string tableName) => DropTable(tableName, dropSequence: true);
 
         static string GetConnectionStringForDatabase(string databaseName)
         {

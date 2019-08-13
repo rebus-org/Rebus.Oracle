@@ -28,7 +28,7 @@ namespace Rebus.Oracle.Tests.Transport
         public ITransport CreateOneWayClient()
         {
             var tableName = ("rebus_messages_" + TestConfig.Suffix).TrimEnd('_');
-             _tablesToDrop.Add(tableName);
+            _tablesToDrop.Add(tableName);
 
             var consoleLoggerFactory = new ConsoleLoggerFactory(false);
             var connectionHelper = new OracleConnectionHelper(OracleTestHelper.ConnectionString);
