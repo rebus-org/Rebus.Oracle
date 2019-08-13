@@ -307,13 +307,15 @@ begin
     WHERE recipient = recipientQueue
             and visible < current_timestamp(6)
             and expiration > current_timestamp(6)          
-    ORDER BY priority ASC, id ASC
+    ORDER BY priority ASC, visible ASC, id ASC
     for update skip locked;
     
     fetch readCursor into messageId;
-    close readCursor;      
-  open output for select * from {_tableName} where id = messageId;
-  delete from {_tableName} where id = messageId;
+    close readCursor;
+
+    open output for select * from {_tableName} where id = messageId;
+
+    delete from {_tableName} where id = messageId;
 END;
 ");
 
