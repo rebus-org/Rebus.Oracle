@@ -205,10 +205,11 @@ namespace Rebus.Oracle.Transport
                             $@"
                             delete from {_table} 
                             where recipient = :recipient 
-                            and expiration < systimestamp(6)
+                            and expiration < :now
                             ";
                         command.BindByName = true;
                         command.Parameters.Add(new OracleParameter("recipient", OracleDbType.Varchar2, _inputQueueName, ParameterDirection.Input));
+                        command.Parameters.Add(new OracleParameter("now", _rebusTime.Now.ToOracleTimeStamp()));
                         affectedRows = command.ExecuteNonQuery();
                     }
 
