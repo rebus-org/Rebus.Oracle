@@ -18,6 +18,8 @@ namespace Rebus.Oracle
 
         bool _disposed;
 
+        internal OracleConnection Connection => _currentConnection;
+
         /// <summary>
         /// Constructs the wrapper with the given connection and transaction
         /// </summary>

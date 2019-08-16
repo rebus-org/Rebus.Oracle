@@ -21,9 +21,9 @@ namespace Rebus.Config
         /// store messages, and the "queue" specified by <paramref name="inputQueueName"/> will be used when querying for messages.
         /// The message table will automatically be created if it does not exist.
         /// </summary>
-        public static void UseOracle(this StandardConfigurer<ITransport> configurer, string connectionStringOrConnectionOrConnectionStringName, string tableName, string inputQueueName, bool enlistInAmbientTransaction = false)
+        public static void UseOracle(this StandardConfigurer<ITransport> configurer, string connectionStringOrConnectionOrConnectionStringName, string tableName, string inputQueueName, bool enlistInAmbientTransaction = false, bool automaticallyCreateTables = true)
         {
-            Configure(configurer, loggerFactory => new OracleConnectionHelper(connectionStringOrConnectionOrConnectionStringName, enlistInAmbientTransaction), tableName, inputQueueName);
+            Configure(configurer, loggerFactory => new OracleConnectionHelper(connectionStringOrConnectionOrConnectionStringName, enlistInAmbientTransaction), tableName, inputQueueName, automaticallyCreateTables);
         }
 
         /// <summary>
@@ -31,14 +31,14 @@ namespace Rebus.Config
         /// The table specified by <paramref name="tableName"/> will be used to store messages.
         /// The message table will automatically be created if it does not exist.
         /// </summary>
-        public static void UseOracleAsOneWayClient(this StandardConfigurer<ITransport> configurer, string connectionStringOrConnectionStringName, string tableName, bool enlistInAmbientTransaction = false)
+        public static void UseOracleAsOneWayClient(this StandardConfigurer<ITransport> configurer, string connectionStringOrConnectionStringName, string tableName, bool enlistInAmbientTransaction = false, bool automaticallyCreateTables = true)
         {
-            Configure(configurer, loggerFactory => new OracleConnectionHelper(connectionStringOrConnectionStringName, enlistInAmbientTransaction), tableName, null);
+            Configure(configurer, loggerFactory => new OracleConnectionHelper(connectionStringOrConnectionStringName, enlistInAmbientTransaction), tableName, null, automaticallyCreateTables);
 
             OneWayClientBackdoor.ConfigureOneWayClient(configurer);
         }
 
-        static void Configure(StandardConfigurer<ITransport> configurer, Func<IRebusLoggerFactory, OracleConnectionHelper> connectionProviderFactory, string tableName, string inputQueueName)
+        static void Configure(StandardConfigurer<ITransport> configurer, Func<IRebusLoggerFactory, OracleConnectionHelper> connectionProviderFactory, string tableName, string inputQueueName, bool automaticallyCreateTables = true)
         {
             configurer.Register(context =>
             {
@@ -47,7 +47,10 @@ namespace Rebus.Config
                 var rebusTime = context.Get<IRebusTime>();
                 var connectionProvider = connectionProviderFactory(rebusLoggerFactory);
                 var transport = new OracleTransport(connectionProvider, tableName, inputQueueName, rebusLoggerFactory, asyncTaskFactory, rebusTime);
-                transport.EnsureTableIsCreated();
+                
+                if (automaticallyCreateTables)
+                    transport.EnsureTableIsCreated();
+
                 return transport;
             });
 
