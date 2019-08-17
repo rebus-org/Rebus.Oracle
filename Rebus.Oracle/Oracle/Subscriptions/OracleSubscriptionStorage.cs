@@ -41,7 +41,7 @@ namespace Rebus.Oracle.Subscriptions
         {
             using (var connection = _connectionHelper.GetConnection())
             {
-                if (connection.Connection.CreateSubscription(_table))
+                if (connection.Connection.CreateRebusSubscription(_table))
                     _log.Info("Table {tableName} does not exist - it will be created now", _table);
             }
         }

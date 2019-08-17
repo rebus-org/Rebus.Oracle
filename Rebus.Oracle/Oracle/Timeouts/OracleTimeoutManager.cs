@@ -128,7 +128,7 @@ namespace Rebus.Oracle.Timeouts
         {
             using (var connection = _connectionHelper.GetConnection())
             {
-                if (connection.Connection.CreateTimeout(_table))
+                if (connection.Connection.CreateRebusTimeout(_table))
                     _log.Info("Table {tableName} does not exist - it will be created now", _table);
             }
         }

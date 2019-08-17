@@ -241,7 +241,7 @@ namespace Rebus.Oracle.Transport
             {
                 using (var connection = _connectionHelper.GetConnection())
                 {
-                    if (connection.Connection.CreateTransport(_table))
+                    if (connection.Connection.CreateRebusTransport(_table))
                         _log.Info("Table {tableName} does not exist - it will be created now", _table);
                     else
                         _log.Info("Database already contains a table named {tableName} - will not create anything", _table);

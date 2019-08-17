@@ -5,18 +5,18 @@ namespace Rebus.Oracle.Schema
 {
     /// <summary>Methods to create the required DB objects supporting Rebus.Oracle.</summary>
     /// <remarks>These methods are automatically called by Rebus unless you pass automaticallyCreateTables = false during configuration.</remarks>
-    public static class DbSchemaExtensions
+    public static class OracleConnectionExtensions
     {
         /// <summary>Create objects supporting Transport.</summary>
-        public static bool CreateTransport(this OracleConnection connection, DbName tableName) 
+        public static bool CreateRebusTransport(this OracleConnection connection, DbName tableName) 
             => connection.CreateIfNotExists(tableName, DDL.transport);
 
         /// <summary>Create objects supporting Timeouts.</summary>
-        public static bool CreateTimeout(this OracleConnection connection, DbName tableName)
+        public static bool CreateRebusTimeout(this OracleConnection connection, DbName tableName)
             => connection.CreateIfNotExists(tableName, DDL.timeout);
 
         /// <summary>Create objects supporting Subscriptions.</summary>
-        public static bool CreateSubscription(this OracleConnection connection, DbName tableName)
+        public static bool CreateRebusSubscription(this OracleConnection connection, DbName tableName)
             => connection.CreateIfNotExists(tableName, DDL.subscription);
 
         private static bool Exists(this OracleConnection connection, DbName objectName)
