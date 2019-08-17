@@ -4,7 +4,6 @@ using System.Collections.Generic;
 using System.Data;
 using System.Linq;
 using Rebus.Extensions;
-using System.Reflection;
 using System.Threading.Tasks;
 using Oracle.ManagedDataAccess.Client;
 using Rebus.Exceptions;
@@ -12,6 +11,7 @@ using Rebus.Logging;
 using Rebus.Oracle.Reflection;
 using Rebus.Sagas;
 using Rebus.Serialization;
+using Rebus.Oracle.Schema;
 
 namespace Rebus.Oracle.Sagas
 {
@@ -24,8 +24,8 @@ namespace Rebus.Oracle.Sagas
 
         readonly ObjectSerializer _objectSerializer = new ObjectSerializer();
         readonly OracleConnectionHelper _connectionHelper;
-        readonly string _dataTableName;
-        readonly string _indexTableName;
+        readonly DbName _dataTable;
+        readonly DbName _indexTable;
         readonly ILog _log;
 
         /// <summary>
@@ -36,78 +36,22 @@ namespace Rebus.Oracle.Sagas
         {
             if (rebusLoggerFactory == null) throw new ArgumentNullException(nameof(rebusLoggerFactory));
             _connectionHelper = connectionHelper ?? throw new ArgumentNullException(nameof(connectionHelper));
-            _dataTableName = dataTableName ?? throw new ArgumentNullException(nameof(dataTableName));
-            _indexTableName = indexTableName ?? throw new ArgumentNullException(nameof(indexTableName));
+            _dataTable = new DbName(dataTableName) ?? throw new ArgumentNullException(nameof(dataTableName));
+            _indexTable = new DbName(indexTableName) ?? throw new ArgumentNullException(nameof(indexTableName));
             _log = rebusLoggerFactory.GetLogger<OracleSqlSagaStorage>();
         }
 
         /// <summary>
         /// Checks to see if the configured saga data and saga index table exists. If they both exist, we'll continue, if
-        /// neigther of them exists, we'll try to create them. If one of them exists, we'll throw an error.
+        /// neither of them exists, we'll try to create them. If one of them exists, we'll throw an error.
         /// </summary>
         public void EnsureTablesAreCreated()
         {
             using (var connection = _connectionHelper.GetConnection())
             {
-                var tableNames = connection.GetTableNames().ToHashSet();
-
-                var hasDataTable = tableNames.Any(tableName => _dataTableName.Equals(tableName, StringComparison.InvariantCultureIgnoreCase));
-                var hasIndexTable = tableNames.Any(tableName => _indexTableName.Equals(tableName, StringComparison.InvariantCultureIgnoreCase));
-
-                if (hasDataTable && hasIndexTable)
-                {
-                    return;
-                }
-
-                if (hasDataTable)
-                {
-                    throw new RebusApplicationException(
-                        $"The saga index table '{_indexTableName}' does not exist, so the automatic saga schema generation tried to run - but there was already a table named '{_dataTableName}', which was supposed to be created as the data table");
-                }
-
-                if (hasIndexTable)
-                {
-                    throw new RebusApplicationException(
-                        $"The saga data table '{_dataTableName}' does not exist, so the automatic saga schema generation tried to run - but there was already a table named '{_indexTableName}', which was supposed to be created as the index table");
-                }
-
-                _log.Info(
-                    "Saga tables {tableName} (data) and {tableName} (index) do not exist - they will be created now",
-                    _dataTableName, _indexTableName);
-
-                using (var command = connection.CreateCommand())
-                {
-                    command.CommandText =
-                        $@"
-                        CREATE TABLE {_dataTableName} (
-                            id RAW(16) NOT NULL,
-                            revision NUMBER(10) NOT NULL,
-                            data BLOB NOT NULL,
-                            CONSTRAINT {_dataTableName}_pk PRIMARY KEY(id)
-                        )";
-
-                    command.ExecuteNonQuery();
-                }
-
-                using (var command = connection.CreateCommand())
-                {
-                    command.CommandText = $@"
-                        CREATE TABLE {_indexTableName} (
-                            saga_type NVARCHAR2(500) NOT NULL,
-                            key NVARCHAR2(500) NOT NULL,
-                            value NVARCHAR2(2000) NOT NULL,
-                            saga_id RAW(16) NOT NULL,
-                            CONSTRAINT {_indexTableName}_pk PRIMARY KEY(key, value, saga_type)
-                        )";
-                    command.ExecuteNonQuery();
-                }
-                using (var command = connection.CreateCommand())
-                {
-                    command.CommandText = $@"CREATE INDEX {_indexTableName}_IDX ON {_indexTableName} (saga_id)";
-                    command.ExecuteNonQuery();
-                }
-
-                connection.Complete();
+                if (connection.Connection.CreateRebusSaga(_dataTable, _indexTable))
+                    _log.Info("Saga tables {tableName} (data) and {tableName} (index) do not exist - they will be created now",
+                              _dataTable, _indexTable);
             }
         }
 
@@ -126,7 +70,7 @@ namespace Rebus.Oracle.Sagas
                     {
                         command.CommandText = $@"
                             SELECT s.data 
-                                FROM {_dataTableName} s 
+                                FROM {_dataTable} s 
                                 WHERE s.id = :id 
                             ";
                         command.Parameters.Add("id", OracleDbType.Raw).Value = ToGuid(propertyValue).ToByteArray();
@@ -135,8 +79,8 @@ namespace Rebus.Oracle.Sagas
                     {
                         command.CommandText = $@"
                             SELECT s.data
-                                FROM {_dataTableName} s
-                                JOIN {_indexTableName} i on s.id = i.saga_id 
+                                FROM {_dataTable} s
+                                JOIN {_indexTable} i on s.id = i.saga_id 
                                 WHERE i.saga_type = :saga_type AND i.key = :key AND i.value = :value
                             ";
                         command.BindByName = true;
@@ -212,7 +156,7 @@ namespace Rebus.Oracle.Sagas
                         command.CommandText =
                             $@"
                             INSERT 
-                                INTO {_dataTableName} (id, revision, data) 
+                                INTO {_dataTable} (id, revision, data) 
                                 VALUES (:id, :revision, :data)
                             ";
 
@@ -223,7 +167,7 @@ namespace Rebus.Oracle.Sagas
                         catch (OracleException exception)
                         {
                             throw new ConcurrencyException(exception,
-                                $"Saga data {sagaData.GetType()} with ID {sagaData.Id} in table {_dataTableName} could not be inserted!");
+                                $"Saga data {sagaData.GetType()} with ID {sagaData.Id} in table {_dataTable} could not be inserted!");
                         }
                     }
 
@@ -266,7 +210,7 @@ namespace Rebus.Oracle.Sagas
                     using (var command = connection.CreateCommand())
                     {
                         command.BindByName = true;
-                        command.CommandText = $@"DELETE FROM {_indexTableName} WHERE saga_id = :id";
+                        command.CommandText = $@"DELETE FROM {_indexTable} WHERE saga_id = :id";
                         command.Parameters.Add("id", OracleDbType.Raw).Value = sagaData.Id;
                         command.ExecuteNonQuery();
                     }
@@ -282,7 +226,7 @@ namespace Rebus.Oracle.Sagas
 
                         command.CommandText =
                             $@"
-                            UPDATE {_dataTableName} 
+                            UPDATE {_dataTable} 
                                 SET data = :data, revision = :next_revision 
                                 WHERE id = :id AND revision = :current_revision
                             ";
@@ -328,7 +272,7 @@ namespace Rebus.Oracle.Sagas
                         command.CommandText =
                             $@"
                             DELETE 
-                                FROM {_dataTableName} 
+                                FROM {_dataTable} 
                                 WHERE id = :id AND revision = :current_revision
                             ";
 
@@ -349,7 +293,7 @@ namespace Rebus.Oracle.Sagas
                         command.CommandText =
                             $@"
                             DELETE 
-                                FROM {_indexTableName} 
+                                FROM {_indexTable} 
                                 WHERE saga_id = :id
                             ";
                         command.BindByName = true;
@@ -391,7 +335,7 @@ namespace Rebus.Oracle.Sagas
             {
                 // generate batch insert with SQL for each entry in the index
                 command.CommandText =
-                    $@"INSERT INTO {_indexTableName} (saga_type, key, value, saga_id) VALUES (:saga_type, :key, :value, :saga_id)";
+                    $@"INSERT INTO {_indexTable} (saga_type, key, value, saga_id) VALUES (:saga_type, :key, :value, :saga_id)";
                 command.BindByName = true;
                 command.ArrayBindCount = parameters.Count;
                 command.Parameters.Add(new OracleParameter("saga_type", OracleDbType.NVarchar2, parameters.Select(x => x.SagaType).ToArray(), ParameterDirection.Input));

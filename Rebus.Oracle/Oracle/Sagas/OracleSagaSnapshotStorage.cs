@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using Oracle.ManagedDataAccess.Client;
 using Rebus.Auditing.Sagas;
-using Rebus.Extensions;
+using Rebus.Oracle.Schema;
 using Rebus.Sagas;
 using Rebus.Serialization;
 
@@ -17,7 +17,7 @@ namespace Rebus.Oracle.Sagas
         readonly ObjectSerializer _objectSerializer = new ObjectSerializer();
         readonly DictionarySerializer _dictionarySerializer = new DictionarySerializer();
         readonly OracleConnectionHelper _connectionHelper;
-        readonly string _tableName;
+        readonly DbName _table;
 
         /// <summary>
         /// Constructs the storage
@@ -25,7 +25,7 @@ namespace Rebus.Oracle.Sagas
         public OracleSagaSnapshotStorage(OracleConnectionHelper connectionHelper, string tableName)
         {
             _connectionHelper = connectionHelper ?? throw new ArgumentNullException(nameof(connectionHelper));
-            _tableName = tableName ?? throw new ArgumentNullException(nameof(tableName));
+            _table = new DbName(tableName) ?? throw new ArgumentNullException(nameof(tableName));
         }
 
         /// <summary>
@@ -40,7 +40,7 @@ namespace Rebus.Oracle.Sagas
                     command.CommandText =
                         $@"
                         INSERT
-                            INTO {_tableName} (id, revision, data, metadata)
+                            INTO {_table} (id, revision, data, metadata)
                             VALUES (:id, :revision, :data, :metadata)
                         ";
                     command.BindByName = true;
@@ -65,27 +65,7 @@ namespace Rebus.Oracle.Sagas
         {
             using (var connection = _connectionHelper.GetConnection())
             {
-                var tableNames = connection.GetTableNames().ToHashSet();
-
-                if (tableNames.Contains(_tableName)) return;
-
-                using (var command = connection.CreateCommand())
-                {
-                    command.CommandText =
-                        $@"
-                        CREATE TABLE {_tableName} (
-                            id RAW(16) NOT NULL,
-                            revision NUMBER(10) NOT NULL,
-                            metadata CLOB NOT NULL,
-                            data BLOB NOT NULL,
-                            CONSTRAINT {_tableName}_pk PRIMARY KEY (id, revision)
-                        )
-                        ";
-
-                    command.ExecuteNonQuery();
-                }
-
-                connection.Complete();
+                connection.Connection.CreateRebusSagaSnapshot(_table);
             }
         }
     }

@@ -19,6 +19,17 @@ namespace Rebus.Oracle.Schema
         public static bool CreateRebusSubscription(this OracleConnection connection, DbName tableName)
             => connection.CreateIfNotExists(tableName, DDL.subscription);
 
+        /// <summary>Create objects supporting Sagas.</summary>
+        public static bool CreateRebusSaga(this OracleConnection connection, DbName dataTableName, DbName indexTableName)
+        {
+            return connection.CreateIfNotExists(dataTableName, DDL.sagaData) |
+                   connection.CreateIfNotExists(indexTableName, DDL.sagaIndex);
+        }
+
+        /// <summary>Create objects supporting Sagas Snapshots.</summary>
+        public static bool CreateRebusSagaSnapshot(this OracleConnection connection, DbName tableName)
+            => connection.CreateIfNotExists(tableName, DDL.sagaSnapshot);
+
         private static bool Exists(this OracleConnection connection, DbName objectName)
         {
             using (var command = connection.CreateCommand())

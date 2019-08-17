@@ -88,5 +88,37 @@ $@"CREATE TABLE {table} (
     PRIMARY KEY (topic, address)
 )"
         };
+
+        public static readonly Func<DbName, string[]> sagaData = table => new[] {
+$@"CREATE TABLE {table} (
+    id raw(16) CONSTRAINT {table.Name}_pk PRIMARY KEY,
+    revision number(10) NOT NULL,
+    data blob NOT NULL
+)"
+        };
+
+        public static readonly Func<DbName, string[]> sagaIndex = table => new[] {
+$@"CREATE TABLE {table} (
+    saga_type nvarchar2(500) NOT NULL,
+    key nvarchar2(500) NOT NULL,
+    value nvarchar2(2000) NOT NULL,
+    saga_id raw(16) NOT NULL,
+
+    CONSTRAINT {table.Name}_pk PRIMARY KEY (key, value, saga_type)
+)",
+
+$"CREATE INDEX {table}_idx ON {table} (saga_id)"
+        };
+
+        public static readonly Func<DbName, string[]> sagaSnapshot = table => new[] {
+$@"CREATE TABLE {table} (
+    id raw(16) NOT NULL,
+    revision number(10) NOT NULL,
+    metadata clob NOT NULL,
+    data blob NOT NULL,
+
+    CONSTRAINT {table.Name}_pk PRIMARY KEY (id, revision)
+)"
+        };
     }
 }
