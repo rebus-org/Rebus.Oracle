@@ -11,6 +11,10 @@ namespace Rebus.Oracle.Schema
         public static bool CreateTransport(this OracleConnection connection, DbName tableName) 
             => connection.CreateIfNotExists(tableName, DDL.transport);
 
+        /// <summary>Create objects supporting Timeouts.</summary>
+        public static bool CreateTimeout(this OracleConnection connection, DbName tableName)
+            => connection.CreateIfNotExists(tableName, DDL.timeout);
+
         private static bool Exists(this OracleConnection connection, DbName objectName)
         {
             using (var command = connection.CreateCommand())
