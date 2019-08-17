@@ -2,14 +2,13 @@ using System;
 using System.Collections.Generic;
 using System.Data;
 using System.IO;
-using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using Oracle.ManagedDataAccess.Client;
-using Rebus.Bus;
 using Rebus.DataBus;
 using Rebus.Exceptions;
 using Rebus.Logging;
+using Rebus.Oracle.Schema;
 using Rebus.Serialization;
 using Rebus.Time;
 // ReSharper disable SimplifyLinqExpression
@@ -19,81 +18,38 @@ namespace Rebus.Oracle.DataBus
     /// <summary>
     /// Implementation of <see cref="IDataBusStorage"/> that uses Oracle to store data
     /// </summary>
-    public class OracleDataBusStorage : IDataBusStorage, IInitializable
+    public class OracleDataBusStorage : IDataBusStorage
     {
         static readonly Encoding TextEncoding = Encoding.UTF8;
         readonly DictionarySerializer _dictionarySerializer = new DictionarySerializer();
         readonly OracleConnectionHelper _connectionHelper;
-        readonly string _tableName;
-        readonly bool _ensureTableIsCreated;
+        readonly DbName _table;
         readonly ILog _log;
         readonly IRebusTime _rebusTime;
 
         /// <summary>
         /// Creates the data storage
         /// </summary>
-        public OracleDataBusStorage(OracleConnectionHelper connectionHelper, string tableName, bool ensureTableIsCreated, IRebusLoggerFactory rebusLoggerFactory, IRebusTime rebusTime)
+        public OracleDataBusStorage(OracleConnectionHelper connectionHelper, string tableName, IRebusLoggerFactory rebusLoggerFactory, IRebusTime rebusTime)
         {
             if (rebusLoggerFactory == null) throw new ArgumentNullException(nameof(rebusLoggerFactory));
             _connectionHelper = connectionHelper ?? throw new ArgumentNullException(nameof(connectionHelper));
-            _tableName = tableName ?? throw new ArgumentNullException(nameof(tableName));
-            _ensureTableIsCreated = ensureTableIsCreated;
+            _table = new DbName(tableName) ?? throw new ArgumentNullException(nameof(tableName));
             _log = rebusLoggerFactory.GetLogger<OracleDataBusStorage>();
             _rebusTime = rebusTime ?? throw new ArgumentNullException(nameof(rebusTime));
         }
 
         /// <summary>
-        /// Initializes the SQL Server data storage.
-        /// Will create the data table, unless this has been explicitly turned off when configuring the data storage
+        /// Creates the necessary table if it does not already exist
         /// </summary>
-        public void Initialize()
-        {
-            if (!_ensureTableIsCreated) return;
-
-            try
-            {
-                EnsureTableIsCreated();
-            }
-            catch
-            {
-                // if it failed because of a collision between another thread doing the same thing, just try again once:
-                EnsureTableIsCreated();
-            }
-        }
-
-        void EnsureTableIsCreated()
+        public void EnsureTableIsCreated()
         {
             using (var connection = _connectionHelper.GetConnection())
             {
-                if (connection.GetTableNames().Contains(_tableName, StringComparer.OrdinalIgnoreCase))
-                {
-                    _log.Info("Database already contains a table named {tableName} - will not create anything", _tableName);
-                    return;
-                }
-
-                _log.Info("Creating data bus table {tableName}", _tableName);
-
-                using (var command = connection.CreateCommand())
-                {
-                    command.CommandText = $@"
-CREATE TABLE {_tableName} (
-    id VARCHAR2(200) PRIMARY KEY,
-    meta BLOB,
-    data BLOB NOT NULL,
-    creationTime TIMESTAMP WITH TIME ZONE NOT NULL,
-    lastReadTime TIMESTAMP WITH TIME ZONE
-)";
-                    try
-                    {
-                        command.ExecuteNonQuery();
-                    }
-                    catch (OracleException exception)
-                    {
-                        throw new RebusApplicationException(exception, "Error executing SQL command\n" + command.CommandText);
-                    }
-                }
-
-                // Note: calling connection.Complete() is not required as Oracle DDL is not transactional
+                if (connection.Connection.CreateRebusDataBus(_table))
+                    _log.Info("Creating data bus table {tableName}", _table);
+                else
+                    _log.Info("Database already contains a table named {tableName} - will not create anything", _table);
             }
         }
 
@@ -116,7 +72,7 @@ CREATE TABLE {_tableName} (
                                 null : 
                                 TextEncoding.GetBytes(_dictionarySerializer.SerializeToString(metadata));
 
-                            command.CommandText = $"INSERT INTO {_tableName} (id, meta, data, creationTime) VALUES (:id, :meta, :data, :now)";
+                            command.CommandText = $"INSERT INTO {_table} (id, meta, data, creationTime) VALUES (:id, :meta, :data, :now)";
                             command.BindByName = true;
                             command.Parameters.Add("id", id);
                             command.Parameters.Add("meta", (object)metadataBytes ?? DBNull.Value);
@@ -156,7 +112,7 @@ CREATE TABLE {_tableName} (
                     connection = _connectionHelper.GetConnection();
 
                     command = connection.CreateCommand();
-                    command.CommandText = $"SELECT data FROM {_tableName} WHERE id = :id";
+                    command.CommandText = $"SELECT data FROM {_table} WHERE id = :id";
                     command.Parameters.Add("id", id);
                     command.InitialLOBFetchSize = 4000;
 
@@ -198,7 +154,7 @@ CREATE TABLE {_tableName} (
         {
             using (var command = connection.CreateCommand())
             {
-                command.CommandText = $"UPDATE {_tableName} SET lastReadTime = :now WHERE id = :id";
+                command.CommandText = $"UPDATE {_table} SET lastReadTime = :now WHERE id = :id";
                 command.BindByName = true;
                 command.Parameters.Add("now", _rebusTime.Now.ToOracleTimeStamp());
                 command.Parameters.Add("id", id);
@@ -216,7 +172,7 @@ CREATE TABLE {_tableName} (
                 using (var connection =  _connectionHelper.GetConnection())
                 using (var command = connection.CreateCommand())
                 {
-                    command.CommandText = $"SELECT meta, creationTime, lastReadTime, LENGTHB(data) AS dataLength FROM {_tableName} WHERE id = :id";
+                    command.CommandText = $"SELECT meta, creationTime, lastReadTime, LENGTHB(data) AS dataLength FROM {_table} WHERE id = :id";
                     command.Parameters.Add("id", id);
 
                     using (var reader = command.ExecuteReader(CommandBehavior.SingleRow))

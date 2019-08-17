@@ -16,7 +16,7 @@ namespace Rebus.Config
         /// <summary>
         /// Configures the data bus to store data in a central Oracle table
         /// </summary>
-        public static void StoreInOracle(this StandardConfigurer<IDataBusStorage> configurer, string connectionString, string tableName, Action<OracleConnection> additionalConnectionSetup = null, bool automaticallyCreateTables = true, bool enlistInAmbientTransaction = false)
+        public static void StoreInOracle(this StandardConfigurer<IDataBusStorage> configurer, string connectionString, string tableName, Action<OracleConnection> additionalConnectionSetup = null, bool enlistInAmbientTransaction = false, bool automaticallyCreateTables = true)
         {
             if (configurer == null) throw new ArgumentNullException(nameof(configurer));
             if (connectionString == null) throw new ArgumentNullException(nameof(connectionString));
@@ -27,7 +27,9 @@ namespace Rebus.Config
                 var loggerFactory = c.Get<IRebusLoggerFactory>();
                 var rebusTime = c.Get<IRebusTime>();
                 var connectionHelper = new OracleConnectionHelper(connectionString, additionalConnectionSetup, enlistInAmbientTransaction);
-                return new OracleDataBusStorage(connectionHelper, tableName, automaticallyCreateTables, loggerFactory, rebusTime);
+                var storage = new OracleDataBusStorage(connectionHelper, tableName, loggerFactory, rebusTime);
+                if (automaticallyCreateTables) storage.EnsureTableIsCreated();
+                return storage;
             });
         }
     }

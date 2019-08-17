@@ -22,8 +22,8 @@ namespace Rebus.Oracle.Tests.DataBus
         protected override void SetUp()
         {
             var loggerFactory = new ConsoleLoggerFactory(false);
-            _storage = new OracleDataBusStorage(OracleTestHelper.ConnectionHelper, tableName, true, loggerFactory, new FakeRebusTime());
-            _storage.Initialize();
+            _storage = new OracleDataBusStorage(OracleTestHelper.ConnectionHelper, tableName, loggerFactory, new FakeRebusTime());
+            _storage.EnsureTableIsCreated();
         }
 
         protected override void TearDown()

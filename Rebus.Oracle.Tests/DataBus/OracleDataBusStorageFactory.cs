@@ -13,9 +13,9 @@ namespace Rebus.Oracle.Tests.DataBus
         public IDataBusStorage Create()
         {
             var consoleLoggerFactory = new ConsoleLoggerFactory(false);
-            var sqlServerDataBusStorage = new OracleDataBusStorage(OracleTestHelper.ConnectionHelper, "databus", true, consoleLoggerFactory, _fakeRebusTime);
-            sqlServerDataBusStorage.Initialize();
-            return sqlServerDataBusStorage;
+            var storage = new OracleDataBusStorage(OracleTestHelper.ConnectionHelper, "databus", consoleLoggerFactory, _fakeRebusTime);
+            storage.EnsureTableIsCreated();
+            return storage;
         }
 
         public void CleanUp()

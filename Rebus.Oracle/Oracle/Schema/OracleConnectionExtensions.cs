@@ -30,6 +30,10 @@ namespace Rebus.Oracle.Schema
         public static bool CreateRebusSagaSnapshot(this OracleConnection connection, DbName tableName)
             => connection.CreateIfNotExists(tableName, DDL.sagaSnapshot);
 
+        /// <summary>Create objects supporting DataBus.</summary>
+        public static bool CreateRebusDataBus(this OracleConnection connection, DbName tableName)
+            => connection.CreateIfNotExists(tableName, DDL.dataBus);
+
         private static bool Exists(this OracleConnection connection, DbName objectName)
         {
             using (var command = connection.CreateCommand())

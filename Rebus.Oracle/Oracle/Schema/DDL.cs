@@ -120,5 +120,15 @@ $@"CREATE TABLE {table} (
     CONSTRAINT {table.Name}_pk PRIMARY KEY (id, revision)
 )"
         };
+
+        public static readonly Func<DbName, string[]> dataBus = table => new[] {
+$@"CREATE TABLE {table} (
+    id varchar2(200) CONSTRAINT {table}_pk PRIMARY KEY,
+    meta blob,
+    data blob NOT NULL,
+    creationTime timestamp with time zone NOT NULL,
+    lastReadTime timestamp with time zone
+)"
+        };
     }
 }
