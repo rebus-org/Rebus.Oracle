@@ -80,5 +80,13 @@ END;",
 
 $"CREATE INDEX {table}_due_idx ON {table} (due_time)"
         };
+
+        public static readonly Func<DbName, string[]> subscription = table => new[] {
+$@"CREATE TABLE {table} (
+    topic varchar(200) NOT NULL,
+    address varchar(200) NOT NULL,
+    PRIMARY KEY (topic, address)
+)"
+        };
     }
 }

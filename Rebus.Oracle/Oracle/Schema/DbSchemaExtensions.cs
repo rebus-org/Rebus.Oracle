@@ -15,6 +15,10 @@ namespace Rebus.Oracle.Schema
         public static bool CreateTimeout(this OracleConnection connection, DbName tableName)
             => connection.CreateIfNotExists(tableName, DDL.timeout);
 
+        /// <summary>Create objects supporting Subscriptions.</summary>
+        public static bool CreateSubscription(this OracleConnection connection, DbName tableName)
+            => connection.CreateIfNotExists(tableName, DDL.subscription);
+
         private static bool Exists(this OracleConnection connection, DbName objectName)
         {
             using (var command = connection.CreateCommand())
