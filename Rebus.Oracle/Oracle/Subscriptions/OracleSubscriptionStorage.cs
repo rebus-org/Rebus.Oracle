@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Data;
 using System.Threading.Tasks;
 using Oracle.ManagedDataAccess.Client;
+using Rebus.Exceptions;
 using Rebus.Logging;
 using Rebus.Oracle.Schema;
 using Rebus.Subscriptions;
@@ -123,7 +124,7 @@ namespace Rebus.Oracle.Subscriptions
                 }
                 catch (OracleException exception)
                 {
-                    Console.WriteLine(exception);
+                    throw new RebusApplicationException(exception, "Failed to delete subscription from storage");
                 }
 
                 connection.Complete();
