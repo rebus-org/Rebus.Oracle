@@ -309,15 +309,11 @@ namespace Rebus.Oracle.Transport
         {
             var valueOrNull = headers.GetValueOrNull(MessagePriorityHeaderKey);
             if (valueOrNull == null) return 0;
-
-            try
-            {
-                return int.Parse(valueOrNull);
-            }
-            catch (Exception exception)
-            {
-                throw new FormatException($"Could not parse '{valueOrNull}' into an Int32!", exception);
-            }
+            
+            if (!int.TryParse(valueOrNull, out int priority))
+                throw new FormatException($"Could not parse '{valueOrNull}' into an Int32!");
+            
+            return priority;
         }
 
         int GetInitialVisibilityDelay(IDictionary<string, string> headers)
