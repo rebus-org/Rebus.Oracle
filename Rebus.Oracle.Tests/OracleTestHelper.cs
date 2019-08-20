@@ -9,17 +9,17 @@ namespace Rebus.Oracle.Tests
         const int TableDoesNotExist = 942;
         const int SequenceDoesNotExist = 2289;
         const int ProcedureDoesNotExist = 4043;
-        static readonly OracleConnectionHelper OracleConnectionHelper = new OracleConnectionHelper(ConnectionString);
+        static readonly OracleFactory OracleConnectionHelper = new OracleFactory(ConnectionString);
 
         public static string DatabaseName => $"rebus2_test_{TestConfig.Suffix}".TrimEnd('_');
 
         public static string ConnectionString => GetConnectionStringForDatabase(DatabaseName);
 
-        public static OracleConnectionHelper ConnectionHelper => OracleConnectionHelper;
+        public static OracleFactory ConnectionHelper => OracleConnectionHelper;
 
         static void DropTable(string tableName, bool dropSequence)
         {
-            using (var connection = OracleConnectionHelper.GetConnection())
+            using (var connection = OracleConnectionHelper.OpenRaw())
             using (var command = connection.CreateCommand())
             {
                 try
@@ -39,8 +39,6 @@ namespace Rebus.Oracle.Tests
                 }
                 catch (OracleException exception) when (exception.Number == SequenceDoesNotExist)
                 { }
-
-                connection.Complete();
             }
         }
 
@@ -49,7 +47,7 @@ namespace Rebus.Oracle.Tests
 
         public static void DropProcedure(string procedureName)
         {
-            using (var connection = OracleConnectionHelper.GetConnection())
+            using (var connection = OracleConnectionHelper.OpenRaw())
             using (var command = connection.CreateCommand())
             {
                 try
@@ -60,8 +58,6 @@ namespace Rebus.Oracle.Tests
                 }
                 catch (OracleException exception) when (exception.Number == ProcedureDoesNotExist)
                 { }
-
-                connection.Complete();
             }
         }
 

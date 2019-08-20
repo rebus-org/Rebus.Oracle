@@ -38,8 +38,6 @@ namespace Rebus.Oracle.Schema
         {
             using (var command = connection.CreateCommand())
             {
-                command.BindByName = true;
-
                 if (objectName.Owner == null)
                 {
                     command.CommandText = "select 1 from user_objects where object_name = upper(:name)";

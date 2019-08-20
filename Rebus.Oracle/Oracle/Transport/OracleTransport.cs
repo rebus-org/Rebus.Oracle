@@ -28,7 +28,7 @@ namespace Rebus.Oracle.Transport
 
         static readonly HeaderSerializer HeaderSerializer = new HeaderSerializer();
 
-        readonly OracleConnectionHelper _connectionHelper;
+        readonly OracleFactory _connectionHelper;
         readonly DbName _table;
         readonly string _inputQueueName;
         readonly AsyncBottleneck _receiveBottleneck = new AsyncBottleneck(20);
@@ -55,7 +55,7 @@ namespace Rebus.Oracle.Transport
         /// <param name="rebusLoggerFactory"></param>
         /// <param name="asyncTaskFactory"></param>
         /// <param name="rebusTime"></param>
-        public OracleTransport(OracleConnectionHelper connectionHelper, string tableName, string inputQueueName, IRebusLoggerFactory rebusLoggerFactory, IAsyncTaskFactory asyncTaskFactory, IRebusTime rebusTime)
+        public OracleTransport(OracleFactory connectionHelper, string tableName, string inputQueueName, IRebusLoggerFactory rebusLoggerFactory, IAsyncTaskFactory asyncTaskFactory, IRebusTime rebusTime)
         {
             if (rebusLoggerFactory == null) throw new ArgumentNullException(nameof(rebusLoggerFactory));
             if (asyncTaskFactory == null) throw new ArgumentNullException(nameof(asyncTaskFactory));
@@ -137,7 +137,6 @@ namespace Rebus.Oracle.Transport
                 // must be last because the other functions on the headers might change them
                 var serializedHeaders = HeaderSerializer.Serialize(headers);
 
-                command.BindByName = true;
                 command.Parameters.Add(new OracleParameter("recipient", OracleDbType.Varchar2, destinationAddress, ParameterDirection.Input));
                 command.Parameters.Add(new OracleParameter("headers", OracleDbType.Blob, serializedHeaders, ParameterDirection.Input));
                 command.Parameters.Add(new OracleParameter("body", OracleDbType.Blob, message.Body, ParameterDirection.Input));
@@ -195,7 +194,7 @@ namespace Rebus.Oracle.Transport
 
             while (true)
             {
-                using (var connection = _connectionHelper.GetConnection())
+                using (var connection = _connectionHelper.Open())
                 {
                     int affectedRows;
 
@@ -207,7 +206,6 @@ namespace Rebus.Oracle.Transport
                             where recipient = :recipient 
                             and expiration < :now
                             ";
-                        command.BindByName = true;
                         command.Parameters.Add(new OracleParameter("recipient", OracleDbType.Varchar2, _inputQueueName, ParameterDirection.Input));
                         command.Parameters.Add(new OracleParameter("now", _rebusTime.Now.ToOracleTimeStamp()));
                         affectedRows = command.ExecuteNonQuery();
@@ -240,9 +238,9 @@ namespace Rebus.Oracle.Transport
         {
             try
             {
-                using (var connection = _connectionHelper.GetConnection())
+                using (var connection = _connectionHelper.OpenRaw())
                 {
-                    if (connection.Connection.CreateRebusTransport(_table))
+                    if (connection.CreateRebusTransport(_table))
                         _log.Info("Table {tableName} does not exist - it will be created now", _table);
                     else
                         _log.Info("Database already contains a table named {tableName} - will not create anything", _table);
@@ -256,19 +254,19 @@ namespace Rebus.Oracle.Transport
 
         class ConnectionWrapper : IDisposable
         {
-            public ConnectionWrapper(OracleDbConnection connection)
+            public ConnectionWrapper(UnitOfWork connection)
             {
                 Connection = connection;
                 Semaphore = new SemaphoreSlim(1, 1);
             }
 
-            public OracleDbConnection Connection { get; }
+            public UnitOfWork Connection { get; }
             public SemaphoreSlim Semaphore { get; }
 
             public void Dispose()
             {
-                Connection?.Dispose();
-                Semaphore?.Dispose();
+                Connection.Dispose();
+                Semaphore.Dispose();
             }
         }
 
@@ -278,7 +276,7 @@ namespace Rebus.Oracle.Transport
                 .GetOrAdd(CurrentConnectionKey,
                     () =>
                     {
-                        var dbConnection = _connectionHelper.GetConnection();
+                        var dbConnection = _connectionHelper.Open();
                         var connectionWrapper = new ConnectionWrapper(dbConnection);
                         context.OnCommitted(() =>
                         {

@@ -90,7 +90,7 @@ namespace Rebus.Oracle.Tests.Transport
         static OracleTransport GetTransport()
         {
             var loggerFactory = new ConsoleLoggerFactory(false);
-            var connectionProvider = new OracleConnectionHelper(OracleTestHelper.ConnectionString);
+            var connectionProvider = new OracleFactory(OracleTestHelper.ConnectionString);
             var asyncTaskFactory = new TplAsyncTaskFactory(loggerFactory);
 
             var transport = new OracleTransport(
