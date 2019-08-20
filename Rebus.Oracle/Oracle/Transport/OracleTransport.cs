@@ -285,7 +285,7 @@ namespace Rebus.Oracle.Transport
                             dbConnection.Complete();
                             return Task.CompletedTask;
                         });
-                        context.OnDisposed(() => connectionWrapper.Dispose());
+                        context.OnDisposed(connectionWrapper.Dispose);
                         return connectionWrapper;
                     });
         }
