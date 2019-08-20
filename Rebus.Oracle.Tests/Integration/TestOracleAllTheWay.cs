@@ -22,8 +22,6 @@ namespace Rebus.Oracle.Tests.Integration
 
         protected override void SetUp()
         {
-            DropTables();
-
             _activator = new BuiltinHandlerActivator();
 
             Using(_activator);
@@ -40,12 +38,8 @@ namespace Rebus.Oracle.Tests.Integration
 
         protected override void TearDown()
         {
-            DropTables();
-        }
-
-        static void DropTables()
-        {
             OracleTestHelper.DropTableAndSequence("transports");
+            OracleTestHelper.DropProcedure("rebus_dequeue_transports");
         }
 
         [Test]

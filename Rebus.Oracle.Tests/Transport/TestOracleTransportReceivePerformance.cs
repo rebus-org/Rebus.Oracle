@@ -25,8 +25,6 @@ namespace Rebus.Oracle.Tests.Transport
 
         protected override void SetUp()
         {
-            OracleTestHelper.DropTableAndSequence(TableName);
-
             _adapter = Using(new BuiltinHandlerActivator());
 
             Configure.With(_adapter)
@@ -38,6 +36,12 @@ namespace Rebus.Oracle.Tests.Transport
                     o.SetMaxParallelism(20);
                 })
                 .Start();
+        }
+
+        protected override void TearDown()
+        {
+            OracleTestHelper.DropTableAndSequence(TableName);
+            OracleTestHelper.DropProcedure("rebus_dequeue_" + TableName);
         }
 
         [TestCase(1000)]

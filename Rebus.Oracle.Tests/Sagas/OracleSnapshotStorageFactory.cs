@@ -9,12 +9,7 @@ namespace Rebus.Oracle.Tests.Sagas
 {
     public class OracleSnapshotStorageFactory : ISagaSnapshotStorageFactory
     {
-        const string TableName = "SagaSnaps";
-
-        public OracleSnapshotStorageFactory()
-        {
-            OracleTestHelper.DropTableAndSequence(TableName);
-        }
+        internal const string TableName = "SagaSnaps";
 
         public ISagaSnapshotStorage Create()
         {

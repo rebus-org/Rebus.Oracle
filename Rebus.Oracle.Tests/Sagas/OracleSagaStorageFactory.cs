@@ -7,12 +7,6 @@ namespace Rebus.Oracle.Tests.Sagas
 {
     public class OracleSagaStorageFactory : ISagaStorageFactory
     {
-        public OracleSagaStorageFactory()
-        {
-            OracleTestHelper.DropTableAndSequence("saga_index");
-            OracleTestHelper.DropTableAndSequence("saga_data");
-        }
-
         public ISagaStorage GetSagaStorage()
         {
             var OracleSagaStorage = new OracleSqlSagaStorage(OracleTestHelper.ConnectionHelper, "saga_data", "saga_index", new ConsoleLoggerFactory(false));
@@ -22,8 +16,8 @@ namespace Rebus.Oracle.Tests.Sagas
 
         public void CleanUp()
         {
-            //OracleTestHelper.DropTable("saga_index");
-            //OracleTestHelper.DropTable("saga_data");
+            OracleTestHelper.DropTable("saga_index");
+            OracleTestHelper.DropTable("saga_data");
         }
     }
 }

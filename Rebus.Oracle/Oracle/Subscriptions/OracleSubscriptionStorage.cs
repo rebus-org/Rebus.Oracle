@@ -1,10 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Data;
-using System.Linq;
 using System.Threading.Tasks;
 using Oracle.ManagedDataAccess.Client;
 using Rebus.Logging;
+using Rebus.Oracle.Schema;
 using Rebus.Subscriptions;
 
 namespace Rebus.Oracle.Subscriptions
@@ -17,7 +17,7 @@ namespace Rebus.Oracle.Subscriptions
         const int UniqueKeyViolation = 1;
 
         readonly OracleConnectionHelper _connectionHelper;
-        readonly string _tableName;
+        readonly DbName _table;
         readonly ILog _log;
 
         /// <summary>
@@ -29,7 +29,7 @@ namespace Rebus.Oracle.Subscriptions
         {
             if (rebusLoggerFactory == null) throw new ArgumentNullException(nameof(rebusLoggerFactory));
             _connectionHelper = connectionHelper ?? throw new ArgumentNullException(nameof(connectionHelper));
-            _tableName = tableName ?? throw new ArgumentNullException(nameof(tableName));
+            _table = new DbName(tableName) ?? throw new ArgumentNullException(nameof(tableName));
             IsCentralized = isCentralized;
             _log = rebusLoggerFactory.GetLogger<OracleSubscriptionStorage>();
         }
@@ -41,25 +41,8 @@ namespace Rebus.Oracle.Subscriptions
         {
             using (var connection = _connectionHelper.GetConnection())
             {
-                var tableNames = connection.GetTableNames();
-
-                if (tableNames.Any(tableName => _tableName.Equals(tableName, StringComparison.InvariantCultureIgnoreCase))) return;
-
-                _log.Info("Table {tableName} does not exist - it will be created now", _tableName);
-
-                using (var command = connection.CreateCommand())
-                {
-                    command.CommandText =
-                        $@"
-CREATE TABLE {_tableName} (
-    topic VARCHAR(200) NOT NULL,
-    address VARCHAR(200) NOT NULL,
-    PRIMARY KEY (topic,address)
-)";
-                    command.ExecuteNonQuery();
-                }
-
-                connection.Complete();
+                if (connection.Connection.CreateRebusSubscription(_table))
+                    _log.Info("Table {tableName} does not exist - it will be created now", _table);
             }
         }
 
@@ -71,7 +54,7 @@ CREATE TABLE {_tableName} (
             using (var connection = _connectionHelper.GetConnection())
             using (var command = connection.CreateCommand())
             {
-                command.CommandText = $@"select address from {_tableName} where topic = :topic";
+                command.CommandText = $@"select address from {_table} where topic = :topic";
                 command.BindByName = true;
 
                 command.Parameters.Add(new OracleParameter("topic", OracleDbType.Varchar2, topic, ParameterDirection.Input));
@@ -99,7 +82,7 @@ CREATE TABLE {_tableName} (
             using (var command = connection.CreateCommand())
             {
                 command.CommandText =
-                    $@"insert into {_tableName} (topic, address) values (:topic, :address)";
+                    $@"insert into {_table} (topic, address) values (:topic, :address)";
 
                 command.BindByName = true;
                 command.Parameters.Add(new OracleParameter("topic", OracleDbType.Varchar2, topic, ParameterDirection.Input));
@@ -128,7 +111,7 @@ CREATE TABLE {_tableName} (
             using (var command = connection.CreateCommand())
             {
                 command.CommandText =
-                    $@"delete from {_tableName} where topic = :topic and address = :address";
+                    $@"delete from {_table} where topic = :topic and address = :address";
 
                 command.BindByName = true;
                 command.Parameters.Add(new OracleParameter("topic", OracleDbType.Varchar2, topic, ParameterDirection.Input));

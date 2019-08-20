@@ -1,4 +1,5 @@
-﻿using NUnit.Framework;
+﻿using System;
+using NUnit.Framework;
 using Rebus.Logging;
 using Rebus.Oracle.Timeouts;
 using Rebus.Tests.Contracts.Timeouts;
@@ -13,16 +14,13 @@ namespace Rebus.Oracle.Tests.Timeouts
 
     public class OracleTimeoutManagerFactory : ITimeoutManagerFactory
     {
-        public OracleTimeoutManagerFactory()
-        {
-            OracleTestHelper.DropTableAndSequence("timeouts");
-        }
+        readonly FakeRebusTime _fakeRebusTime = new FakeRebusTime();
 
         public ITimeoutManager Create()
         {
-            var OracleTimeoutManager = new OracleTimeoutManager(OracleTestHelper.ConnectionHelper, "timeouts", new ConsoleLoggerFactory(false));
-            OracleTimeoutManager.EnsureTableIsCreated();
-            return OracleTimeoutManager;
+            var oracleTimeoutManager = new OracleTimeoutManager(OracleTestHelper.ConnectionHelper, "timeouts", new ConsoleLoggerFactory(false), _fakeRebusTime);
+            oracleTimeoutManager.EnsureTableIsCreated();
+            return oracleTimeoutManager;
         }
 
         public void Cleanup()
@@ -30,10 +28,11 @@ namespace Rebus.Oracle.Tests.Timeouts
             OracleTestHelper.DropTableAndSequence("timeouts");
         }
 
+        public void FakeIt(DateTimeOffset fakeTime) => _fakeRebusTime.SetNow(fakeTime);
+
         public string GetDebugInfo()
         {
             return "could not provide debug info for this particular timeout manager.... implement if needed :)";
         }
     }
-
 }

@@ -1,6 +1,6 @@
 using System;
-using System.Threading.Tasks;
 using Oracle.ManagedDataAccess.Client;
+using Oracle.ManagedDataAccess.Types;
 
 // ReSharper disable EmptyGeneralCatchClause
 #pragma warning disable 1998
@@ -13,9 +13,12 @@ namespace Rebus.Oracle
     public class OracleDbConnection : IDisposable
     {
         readonly OracleConnection _currentConnection;
+        
         OracleTransaction _currentTransaction;
 
         bool _disposed;
+
+        internal OracleConnection Connection => _currentConnection;
 
         /// <summary>
         /// Constructs the wrapper with the given connection and transaction
@@ -35,6 +38,11 @@ namespace Rebus.Oracle
             command.Transaction = _currentTransaction;
             return command;
         }
+
+        /// <summary>
+        /// Creates a new blob, associated with the current connection
+        /// </summary>
+        public OracleBlob CreateBlob() => new OracleBlob(_currentConnection);
 
         /// <summary>
         /// Completes the transaction

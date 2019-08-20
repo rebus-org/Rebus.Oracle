@@ -1,11 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Data;
-using System.Linq;
-using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using Oracle.ManagedDataAccess.Client;
 using Rebus.Logging;
+using Rebus.Oracle.Schema;
 using Rebus.Serialization;
 using Rebus.Time;
 using Rebus.Timeouts;
@@ -24,18 +23,20 @@ namespace Rebus.Oracle.Timeouts
     {
         readonly DictionarySerializer _dictionarySerializer = new DictionarySerializer();
         readonly OracleConnectionHelper _connectionHelper;
-        readonly string _tableName;
+        readonly DbName _table;
         readonly ILog _log;
+        readonly IRebusTime _rebusTime;
 
         /// <summary>
         /// Constructs the timeout manager
         /// </summary>
-        public OracleTimeoutManager(OracleConnectionHelper connectionHelper, string tableName, IRebusLoggerFactory rebusLoggerFactory)
+        public OracleTimeoutManager(OracleConnectionHelper connectionHelper, string tableName, IRebusLoggerFactory rebusLoggerFactory, IRebusTime rebusTime)
         {
             if (rebusLoggerFactory == null) throw new ArgumentNullException(nameof(rebusLoggerFactory));
             _connectionHelper = connectionHelper ?? throw new ArgumentNullException(nameof(connectionHelper));
-            _tableName = tableName ?? throw new ArgumentNullException(nameof(tableName));
+            _table = new DbName(tableName) ?? throw new ArgumentNullException(nameof(tableName));
             _log = rebusLoggerFactory.GetLogger<OracleTimeoutManager>();
+            _rebusTime = rebusTime ?? throw new ArgumentNullException(nameof(rebusTime));
         }
 
         /// <summary>
@@ -48,9 +49,9 @@ namespace Rebus.Oracle.Timeouts
                 using (var command = connection.CreateCommand())
                 {
                     command.CommandText =
-                        $@"INSERT INTO {_tableName} (due_time, headers, body) VALUES (:due_time, :headers, :body)"; 
+                        $@"INSERT INTO {_table} (due_time, headers, body) VALUES (:due_time, :headers, :body)"; 
                     command.BindByName = true;
-                    command.Parameters.Add(new OracleParameter("due_time", OracleDbType.TimeStampTZ, approximateDueTime.ToUniversalTime().DateTime, ParameterDirection.Input));
+                    command.Parameters.Add(new OracleParameter("due_time", OracleDbType.TimeStampTZ, approximateDueTime.ToOracleTimeStamp(), ParameterDirection.Input));
                     command.Parameters.Add(new OracleParameter("headers", OracleDbType.Clob, _dictionarySerializer.SerializeToString(headers), ParameterDirection.Input));
                     command.Parameters.Add(new OracleParameter("body", OracleDbType.Blob, body, ParameterDirection.Input));
                     command.ExecuteNonQuery();
@@ -72,21 +73,14 @@ namespace Rebus.Oracle.Timeouts
             {
                 using (var command = connection.CreateCommand())
                 {
-                    command.CommandText =
-                        $@"
-                        SELECT
-                            id,
-                            headers, 
-                            body 
-
-                        FROM {_tableName} 
-
+                    command.CommandText =$@"
+                        SELECT id, headers, body 
+                        FROM {_table} 
                         WHERE due_time <= :current_time 
-
                         ORDER BY due_time
                         FOR UPDATE";
                     command.BindByName = true;
-                    command.Parameters.Add(new OracleParameter("current_time", OracleDbType.TimeStampTZ, RebusTime.Now.ToUniversalTime().DateTime, ParameterDirection.Input));
+                    command.Parameters.Add(new OracleParameter("current_time", _rebusTime.Now.ToOracleTimeStamp()));
 
                     using (var reader = command.ExecuteReader())
                     {
@@ -103,7 +97,7 @@ namespace Rebus.Oracle.Timeouts
                                 using (var deleteCommand = connection.CreateCommand())
                                 {
                                     deleteCommand.BindByName = true;
-                                    deleteCommand.CommandText = $@"DELETE FROM {_tableName} WHERE id = :id";
+                                    deleteCommand.CommandText = $@"DELETE FROM {_table} WHERE id = :id";
                                     deleteCommand.Parameters.Add(new OracleParameter("id", OracleDbType.Int64, id, ParameterDirection.Input));
                                     deleteCommand.ExecuteNonQuery();
                                     return Task.CompletedTask;
@@ -134,59 +128,8 @@ namespace Rebus.Oracle.Timeouts
         {
             using (var connection = _connectionHelper.GetConnection())
             {
-                var tableNames = connection.GetTableNames();
-
-                if (tableNames.Contains(_tableName, StringComparer.OrdinalIgnoreCase))
-                {
-                    return;
-                }
-
-                _log.Info("Table {tableName} does not exist - it will be created now", _tableName);
-                using (var command = connection.CreateCommand())
-                {
-                    command.CommandText =
-                        $@"
-                        CREATE TABLE {_tableName} (
-                            id NUMBER(10) NOT NULL,
-                            due_time TIMESTAMP(7) WITH TIME ZONE NOT NULL,
-                            headers CLOB,
-                            body BLOB,
-                            CONSTRAINT {_tableName}_pk PRIMARY KEY(id)
-                         )";
-
-                    command.ExecuteNonQuery();
-                }
-                using (var command = connection.CreateCommand())
-                {
-                    command.CommandText =
-                        $@"CREATE SEQUENCE {_tableName}_SEQ";
-                    command.ExecuteNonQuery();
-                }
-
-                using (var command = connection.CreateCommand())
-                {
-                    command.CommandText =
-                        $@"
-                        CREATE OR REPLACE TRIGGER {_tableName}_on_insert
-                             BEFORE INSERT ON {_tableName}
-                             FOR EACH ROW
-                        BEGIN
-                            if :new.Id is null then
-                              :new.id := {_tableName}_seq.nextval;
-                            END IF;
-                        END;
-                        ";
-                    command.ExecuteNonQuery();
-                }
-                using (var command = connection.CreateCommand())
-                {
-                    command.CommandText = $@"
-                        CREATE INDEX {_tableName}_due_idx ON {_tableName} (due_time)";
-
-                    command.ExecuteNonQuery();
-                }
-
-                connection.Complete();
+                if (connection.Connection.CreateRebusTimeout(_table))
+                    _log.Info("Table {tableName} does not exist - it will be created now", _table);
             }
         }
     }

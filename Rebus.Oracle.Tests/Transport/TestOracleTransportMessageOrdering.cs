@@ -14,12 +14,16 @@ using Rebus.Transport;
 namespace Rebus.Oracle.Tests.Transport
 {
     [TestFixture]
-    [Ignore("This one should probably be enabled some time later")]
     public class TestOracleTransportMessageOrdering : FixtureBase
     {
         const string QueueName = "test-ordering";
         const string TableName = "Messages";
-        protected override void SetUp() => OracleTestHelper.DropTableAndSequence(TableName);
+
+        protected override void TearDown()
+        {
+            OracleTestHelper.DropTableAndSequence(TableName);
+            OracleTestHelper.DropProcedure("rebus_dequeue_" + TableName);
+        } 
 
         [Test]
         public async Task DeliversMessagesByVisibleTimeAndNotBeInsertionTime()
@@ -94,7 +98,8 @@ namespace Rebus.Oracle.Tests.Transport
                 TableName,
                 QueueName,
                 loggerFactory,
-                asyncTaskFactory
+                asyncTaskFactory,
+                new FakeRebusTime()
             );
 
             transport.EnsureTableIsCreated();
