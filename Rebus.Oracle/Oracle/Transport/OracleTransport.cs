@@ -223,7 +223,7 @@ namespace Rebus.Oracle.Transport
             if (results > 0)
             {
                 _log.Info(
-                    "Performed expired messages cleanup in {0} - {1} expired messages with recipient {2} were deleted",
+                    "Performed expired messages cleanup in {cleanupTime} - {deletedCount} expired messages with recipient {recipient} were deleted",
                     stopwatch.Elapsed, results, _inputQueueName);
             }
 
