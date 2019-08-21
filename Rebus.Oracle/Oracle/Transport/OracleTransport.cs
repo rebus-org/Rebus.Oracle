@@ -205,10 +205,11 @@ namespace Rebus.Oracle.Transport
                             $@"
                             delete from {_table} 
                             where recipient = :recipient 
-                            and expiration < systimestamp(6)
+                            and expiration < :now
                             ";
                         command.BindByName = true;
                         command.Parameters.Add(new OracleParameter("recipient", OracleDbType.Varchar2, _inputQueueName, ParameterDirection.Input));
+                        command.Parameters.Add(new OracleParameter("now", _rebusTime.Now.ToOracleTimeStamp()));
                         affectedRows = command.ExecuteNonQuery();
                     }
 
@@ -222,7 +223,7 @@ namespace Rebus.Oracle.Transport
             if (results > 0)
             {
                 _log.Info(
-                    "Performed expired messages cleanup in {0} - {1} expired messages with recipient {2} were deleted",
+                    "Performed expired messages cleanup in {cleanupTime} - {deletedCount} expired messages with recipient {recipient} were deleted",
                     stopwatch.Elapsed, results, _inputQueueName);
             }
 
@@ -284,7 +285,7 @@ namespace Rebus.Oracle.Transport
                             dbConnection.Complete();
                             return Task.CompletedTask;
                         });
-                        context.OnDisposed(() => connectionWrapper.Dispose());
+                        context.OnDisposed(connectionWrapper.Dispose);
                         return connectionWrapper;
                     });
         }
@@ -308,15 +309,11 @@ namespace Rebus.Oracle.Transport
         {
             var valueOrNull = headers.GetValueOrNull(MessagePriorityHeaderKey);
             if (valueOrNull == null) return 0;
-
-            try
-            {
-                return int.Parse(valueOrNull);
-            }
-            catch (Exception exception)
-            {
-                throw new FormatException($"Could not parse '{valueOrNull}' into an Int32!", exception);
-            }
+            
+            if (!int.TryParse(valueOrNull, out int priority))
+                throw new FormatException($"Could not parse '{valueOrNull}' into an Int32!");
+            
+            return priority;
         }
 
         int GetInitialVisibilityDelay(IDictionary<string, string> headers)
