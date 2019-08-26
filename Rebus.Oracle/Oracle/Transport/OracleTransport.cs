@@ -36,17 +36,10 @@ namespace Rebus.Oracle.Transport
         readonly ILog _log;
         readonly IRebusTime _rebusTime;
 
-        bool _disposed;
-
         /// <summary>
         /// Header key of message priority which happens to be supported by this transport
         /// </summary>
         public const string MessagePriorityHeaderKey = "rbs2-msg-priority";
-
-        /// <summary>
-        /// Indicates the default interval between which expired messages will be cleaned up
-        /// </summary>
-        public static readonly TimeSpan DefaultExpiredMessagesCleanupInterval = TimeSpan.FromSeconds(20);
 
         /// <summary> </summary>
         /// <param name="connectionHelper"></param>
@@ -64,21 +57,20 @@ namespace Rebus.Oracle.Transport
             _connectionHelper = connectionHelper ?? throw new ArgumentNullException(nameof(connectionHelper));
             _table = new DbName(tableName) ?? throw new ArgumentNullException(nameof(tableName));
             _inputQueueName = inputQueueName;
-            _expiredMessagesCleanupTask = asyncTaskFactory.Create("ExpiredMessagesCleanup", PerformExpiredMessagesCleanupCycle, intervalSeconds: 60);
             _rebusTime = rebusTime ?? throw new ArgumentNullException(nameof(rebusTime));
-
-            ExpiredMessagesCleanupInterval = DefaultExpiredMessagesCleanupInterval;
+            
+            // One-way clients don't have an input queue to cleanup
+            if (inputQueueName != null)
+            {
+                _expiredMessagesCleanupTask = asyncTaskFactory.Create("ExpiredMessagesCleanup", PerformExpiredMessagesCleanupCycle, intervalSeconds: 60);
+            }
         }
 
         /// <inheritdoc />
         public void Initialize()
         {
-            if (_inputQueueName == null) return;
-            _expiredMessagesCleanupTask.Start();
+            _expiredMessagesCleanupTask?.Start();
         }
-
-        /// <summary> </summary>
-        public TimeSpan ExpiredMessagesCleanupInterval { get; set; }
 
         /// <summary>The Oracle transport doesn't really have queues, so this function does nothing</summary>
         public void CreateQueue(string address)
@@ -189,43 +181,33 @@ namespace Rebus.Oracle.Transport
 
         Task PerformExpiredMessagesCleanupCycle()
         {
-            var results = 0;
-            var stopwatch = Stopwatch.StartNew();
+            var stopwatch = Stopwatch.StartNew();           
 
-            while (true)
+            using (var connection = _connectionHelper.Open())
+            using (var command = connection.CreateCommand())
             {
-                using (var connection = _connectionHelper.Open())
+                command.CommandText =
+                    $@"
+                    delete from {_table} 
+                    where recipient = :recipient 
+                    and expiration < :now
+                    ";
+                command.Parameters.Add(new OracleParameter("recipient", OracleDbType.Varchar2, _inputQueueName, ParameterDirection.Input));
+                command.Parameters.Add(new OracleParameter("now", _rebusTime.Now.ToOracleTimeStamp()));
+                
+                int deletedRows = command.ExecuteNonQuery();
+                
+                connection.Complete();
+
+                if (deletedRows > 0)
                 {
-                    int affectedRows;
-
-                    using (var command = connection.CreateCommand())
-                    {
-                        command.CommandText =
-                            $@"
-                            delete from {_table} 
-                            where recipient = :recipient 
-                            and expiration < :now
-                            ";
-                        command.Parameters.Add(new OracleParameter("recipient", OracleDbType.Varchar2, _inputQueueName, ParameterDirection.Input));
-                        command.Parameters.Add(new OracleParameter("now", _rebusTime.Now.ToOracleTimeStamp()));
-                        affectedRows = command.ExecuteNonQuery();
-                    }
-
-                    results += affectedRows;
-                    connection.Complete();
-
-                    if (affectedRows == 0) break;
+                    _log.Info(
+                        "Performed expired messages cleanup in {cleanupTime} - {deletedCount} expired messages with recipient {recipient} were deleted",
+                        stopwatch.Elapsed, deletedRows, _inputQueueName);
                 }
-            }
 
-            if (results > 0)
-            {
-                _log.Info(
-                    "Performed expired messages cleanup in {cleanupTime} - {deletedCount} expired messages with recipient {recipient} were deleted",
-                    stopwatch.Elapsed, results, _inputQueueName);
+                return Task.CompletedTask;
             }
-
-            return Task.CompletedTask;
         }
 
         /// <summary>
@@ -289,19 +271,8 @@ namespace Rebus.Oracle.Transport
         }
 
         /// <inheritdoc />
-        public void Dispose()
-        {
-            if (_disposed) return;
-
-            try
-            {
-                _expiredMessagesCleanupTask.Dispose();
-            }
-            finally
-            {
-                _disposed = true;
-            }
-        }
+        // Note: IAsyncTask can be disposed multiple times without side-effects
+        public void Dispose() => _expiredMessagesCleanupTask?.Dispose();
 
         static int GetMessagePriority(Dictionary<string, string> headers)
         {
@@ -317,23 +288,18 @@ namespace Rebus.Oracle.Transport
         int GetInitialVisibilityDelay(IDictionary<string, string> headers)
         {
             if (!headers.TryGetValue(Headers.DeferredUntil, out var deferredUntilDateTimeOffsetString))
-            {
                 return 0;
-            }
-
-            var deferredUntilTime = deferredUntilDateTimeOffsetString.ToDateTimeOffset();
 
             headers.Remove(Headers.DeferredUntil);
+            var deferredUntilTime = deferredUntilDateTimeOffsetString.ToDateTimeOffset();
 
             return (int)(deferredUntilTime - _rebusTime.Now).TotalSeconds;
         }
 
         static int GetTtlSeconds(IReadOnlyDictionary<string, string> headers)
         {
-            const int defaultTtlSecondsAbout60Years = int.MaxValue;
-
             if (!headers.ContainsKey(Headers.TimeToBeReceived))
-                return defaultTtlSecondsAbout60Years;
+                return int.MaxValue;    // about 60 years
 
             var timeToBeReceivedStr = headers[Headers.TimeToBeReceived];
             var timeToBeReceived = TimeSpan.Parse(timeToBeReceivedStr);
