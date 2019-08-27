@@ -24,17 +24,20 @@ namespace Rebus.Oracle.Transport
     /// </summary>
     public class OracleTransport : ITransport, IInitializable, IDisposable
     {
-        const string CurrentConnectionKey = "oracle-transport-current-connection";
-
         static readonly HeaderSerializer HeaderSerializer = new HeaderSerializer();
 
-        readonly OracleFactory _connectionHelper;
+        readonly OracleFactory _factory;
         readonly DbName _table;
-        readonly string _inputQueueName;
         readonly AsyncBottleneck _receiveBottleneck = new AsyncBottleneck(20);
         readonly IAsyncTask _expiredMessagesCleanupTask;
         readonly ILog _log;
         readonly IRebusTime _rebusTime;
+
+        // SQL are cached so that strings are not built up at every command
+        readonly string _sendSql, _receiveSql, _expiredSql;
+
+        /// <summary>Gets the address of the transport</summary>
+        public string Address { get; }
 
         /// <summary>
         /// Header key of message priority which happens to be supported by this transport
@@ -52,16 +55,20 @@ namespace Rebus.Oracle.Transport
         {
             if (rebusLoggerFactory == null) throw new ArgumentNullException(nameof(rebusLoggerFactory));
             if (asyncTaskFactory == null) throw new ArgumentNullException(nameof(asyncTaskFactory));
+            if (tableName == null) throw new ArgumentNullException(nameof(tableName));
 
             _log = rebusLoggerFactory.GetLogger<OracleTransport>();
-            _connectionHelper = connectionHelper ?? throw new ArgumentNullException(nameof(connectionHelper));
-            _table = new DbName(tableName) ?? throw new ArgumentNullException(nameof(tableName));
-            _inputQueueName = inputQueueName;
             _rebusTime = rebusTime ?? throw new ArgumentNullException(nameof(rebusTime));
-            
-            // One-way clients don't have an input queue to cleanup
+            _factory = connectionHelper ?? throw new ArgumentNullException(nameof(connectionHelper));
+            _table = new DbName(tableName);
+            _sendSql = SendCommand.Sql(_table);
+       
+            // One-way clients don't have an input queue to receive from or cleanup
             if (inputQueueName != null)
             {
+                Address = inputQueueName;
+                _receiveSql = BuildReceiveSql();
+                _expiredSql = BuildExpiredSql();
                 _expiredMessagesCleanupTask = asyncTaskFactory.Create("ExpiredMessagesCleanup", PerformExpiredMessagesCleanupCycle, intervalSeconds: 60);
             }
         }
@@ -74,127 +81,86 @@ namespace Rebus.Oracle.Transport
 
         /// <summary>The Oracle transport doesn't really have queues, so this function does nothing</summary>
         public void CreateQueue(string address)
-        {
-        }
+        { }
 
         /// <inheritdoc />
-        public async Task Send(string destinationAddress, TransportMessage message, ITransactionContext context)
+        public Task Send(string destinationAddress, TransportMessage message, ITransactionContext context)
         {
-            var connection = GetConnection(context);
-            var semaphore = connection.Semaphore;
+            var headers = message.Headers.Clone();
+            var priority = GetMessagePriority(headers);
+            var initialVisibilityDelay = new TimeSpan(0, 0, 0, GetInitialVisibilityDelay(headers));
+            var ttlSeconds = new TimeSpan(0, 0, 0, GetTtlSeconds(headers));
+            // must be last because the other functions on the headers might change them
+            var serializedHeaders = HeaderSerializer.Serialize(headers);
 
-            // serialize access to the connection
-            await semaphore.WaitAsync();
-
-            try
+            var command = context.GetSendCommand(_factory, _sendSql);
+            // Lock is blocking, but we're not async anyway (Oracle provider is blocking).
+            // As a bonus: 
+            // (1) Monitor is faster than SemaphoreSlim when there's no contention, which is usually the case; 
+            // (2) we don't need to allocate any extra object (command is private and not exposed to end-users).
+            lock (command)
             {
-                InnerSend(destinationAddress, message, connection);
+                new SendCommand(command)
+                {
+                    Recipient = destinationAddress,
+                    Headers = serializedHeaders,
+                    Body = message.Body,
+                    Priority = priority,
+                    Visible = initialVisibilityDelay,
+                    Now = _rebusTime.Now.ToOracleTimeStamp(),
+                    TtlSeconds = ttlSeconds,
+                }
+                .ExecuteNonQuery();
             }
-            finally
-            {
-                semaphore.Release();
-            }
-        }
 
-        void InnerSend(string destinationAddress, TransportMessage message, ConnectionWrapper connection)
-        {
-            using (var command = connection.Connection.CreateCommand())
-            {
-                command.CommandText = $@"
-                    INSERT INTO {_table}
-                    (
-                        recipient,
-                        headers,
-                        body,
-                        priority,
-                        visible,
-                        expiration
-                    )
-                    VALUES
-                    (
-                        :recipient,
-                        :headers,
-                        :body,
-                        :priority,
-                        :now + :visible,
-                        :now + :ttlseconds
-                    )";
+            return Task.CompletedTask;
+        }      
 
-                var headers = message.Headers.Clone();
-
-                var priority = GetMessagePriority(headers);
-                var initialVisibilityDelay = new TimeSpan(0, 0, 0, GetInitialVisibilityDelay(headers));
-                var ttlSeconds = new TimeSpan(0, 0, 0, GetTtlSeconds(headers));
-
-                // must be last because the other functions on the headers might change them
-                var serializedHeaders = HeaderSerializer.Serialize(headers);
-
-                command.Parameters.Add(new OracleParameter("recipient", OracleDbType.Varchar2, destinationAddress, ParameterDirection.Input));
-                command.Parameters.Add(new OracleParameter("headers", OracleDbType.Blob, serializedHeaders, ParameterDirection.Input));
-                command.Parameters.Add(new OracleParameter("body", OracleDbType.Blob, message.Body, ParameterDirection.Input));
-                command.Parameters.Add(new OracleParameter("priority", OracleDbType.Int32, priority, ParameterDirection.Input));
-                command.Parameters.Add(new OracleParameter("visible", OracleDbType.IntervalDS, initialVisibilityDelay, ParameterDirection.Input));
-                command.Parameters.Add(new OracleParameter("now", _rebusTime.Now.ToOracleTimeStamp()));
-                command.Parameters.Add(new OracleParameter("ttlseconds", OracleDbType.IntervalDS, ttlSeconds, ParameterDirection.Input));
-
-                command.ExecuteNonQuery();
-            }
-        }
+        string BuildReceiveSql() => $"{_table.Prefix}rebus_dequeue_{_table.Name}";
 
         /// <inheritdoc />
         public async Task<TransportMessage> Receive(ITransactionContext context, CancellationToken cancellationToken)
         {
             using (await _receiveBottleneck.Enter(cancellationToken))
             {
-                var connection = GetConnection(context);
+                var connection = context.GetConnection(_factory);
 
-                TransportMessage receivedTransportMessage;
-
-                using (var selectCommand = connection.Connection.CreateCommand())
+                using (var selectCommand = connection.CreateCommand())
                 {
-                    selectCommand.CommandText = $"{_table.Prefix}rebus_dequeue_{_table.Name}";
+                    selectCommand.CommandText = _receiveSql;
                     selectCommand.CommandType = CommandType.StoredProcedure;
-                    selectCommand.Parameters.Add(new OracleParameter("recipientQueue", OracleDbType.Varchar2, _inputQueueName, ParameterDirection.Input));
-                    selectCommand.Parameters.Add(new OracleParameter("now", _rebusTime.Now.ToOracleTimeStamp()));
-                    selectCommand.Parameters.Add(new OracleParameter("output", OracleDbType.RefCursor, ParameterDirection.Output));
+                    selectCommand.Parameters.Add("recipientQueue", Address);
+                    selectCommand.Parameters.Add("now", _rebusTime.Now.ToOracleTimeStamp());
+                    selectCommand.Parameters.Add("output", OracleDbType.RefCursor, ParameterDirection.Output);
                     selectCommand.InitialLOBFetchSize = -1;
-
                     selectCommand.ExecuteNonQuery();
+
                     using (var reader = (selectCommand.Parameters["output"].Value as OracleRefCursor).GetDataReader()) 
                     {
-                        if (!reader.Read())
-                        {
-                            return null;
-                        }
+                        if (!reader.Read()) return null;
 
-                        var headers = reader["headers"];
-                        var headersDictionary = HeaderSerializer.Deserialize((byte[])headers);
+                        var headers = (byte[])reader["headers"];
                         var body = (byte[])reader["body"];
-
-                        receivedTransportMessage = new TransportMessage(headersDictionary, body);
+                        var headersDictionary = HeaderSerializer.Deserialize(headers);
+                        return new TransportMessage(headersDictionary, body);
                     }
                 }
-
-                return receivedTransportMessage;
             }
         }
+
+        string BuildExpiredSql() => $"delete from {_table} where recipient = :recipient and expiration < :now";
 
         Task PerformExpiredMessagesCleanupCycle()
         {
             var stopwatch = Stopwatch.StartNew();           
 
-            using (var connection = _connectionHelper.Open())
+            using (var connection = _factory.Open())
             using (var command = connection.CreateCommand())
             {
-                command.CommandText =
-                    $@"
-                    delete from {_table} 
-                    where recipient = :recipient 
-                    and expiration < :now
-                    ";
-                command.Parameters.Add(new OracleParameter("recipient", OracleDbType.Varchar2, _inputQueueName, ParameterDirection.Input));
-                command.Parameters.Add(new OracleParameter("now", _rebusTime.Now.ToOracleTimeStamp()));
-                
+                command.CommandText = _expiredSql;
+                command.Parameters.Add("recipient", Address);
+                command.Parameters.Add("now", _rebusTime.Now.ToOracleTimeStamp());            
+
                 int deletedRows = command.ExecuteNonQuery();
                 
                 connection.Complete();
@@ -203,24 +169,19 @@ namespace Rebus.Oracle.Transport
                 {
                     _log.Info(
                         "Performed expired messages cleanup in {cleanupTime} - {deletedCount} expired messages with recipient {recipient} were deleted",
-                        stopwatch.Elapsed, deletedRows, _inputQueueName);
+                        stopwatch.Elapsed, deletedRows, Address);
                 }
 
                 return Task.CompletedTask;
             }
         }
 
-        /// <summary>
-        /// Gets the address of the transport
-        /// </summary>
-        public string Address => _inputQueueName;
-
         /// <summary>Creates the necessary DB objects</summary>
         public void EnsureTableIsCreated()
         {
             try
             {
-                using (var connection = _connectionHelper.OpenRaw())
+                using (var connection = _factory.OpenRaw())
                 {
                     if (connection.CreateRebusTransport(_table))
                         _log.Info("Table {tableName} does not exist - it will be created now", _table);
@@ -232,42 +193,6 @@ namespace Rebus.Oracle.Transport
             {
                 throw new RebusApplicationException(exception, $"Error attempting to initialize Oracle transport schema with mesages table {_table}");
             }
-        }
-
-        class ConnectionWrapper : IDisposable
-        {
-            public ConnectionWrapper(UnitOfWork connection)
-            {
-                Connection = connection;
-                Semaphore = new SemaphoreSlim(1, 1);
-            }
-
-            public UnitOfWork Connection { get; }
-            public SemaphoreSlim Semaphore { get; }
-
-            public void Dispose()
-            {
-                Connection.Dispose();
-                Semaphore.Dispose();
-            }
-        }
-
-        ConnectionWrapper GetConnection(ITransactionContext context)
-        {
-            return context
-                .GetOrAdd(CurrentConnectionKey,
-                    () =>
-                    {
-                        var dbConnection = _connectionHelper.Open();
-                        var connectionWrapper = new ConnectionWrapper(dbConnection);
-                        context.OnCommitted(() =>
-                        {
-                            dbConnection.Complete();
-                            return Task.CompletedTask;
-                        });
-                        context.OnDisposed(connectionWrapper.Dispose);
-                        return connectionWrapper;
-                    });
         }
 
         /// <inheritdoc />
@@ -285,7 +210,7 @@ namespace Rebus.Oracle.Transport
             return priority;
         }
 
-        int GetInitialVisibilityDelay(IDictionary<string, string> headers)
+        int GetInitialVisibilityDelay(Dictionary<string, string> headers)
         {
             if (!headers.TryGetValue(Headers.DeferredUntil, out var deferredUntilDateTimeOffsetString))
                 return 0;
@@ -296,14 +221,12 @@ namespace Rebus.Oracle.Transport
             return (int)(deferredUntilTime - _rebusTime.Now).TotalSeconds;
         }
 
-        static int GetTtlSeconds(IReadOnlyDictionary<string, string> headers)
+        static int GetTtlSeconds(Dictionary<string, string> headers)
         {
-            if (!headers.ContainsKey(Headers.TimeToBeReceived))
+            if (!headers.TryGetValue(Headers.TimeToBeReceived, out var timeToBeReceivedStr))
                 return int.MaxValue;    // about 60 years
 
-            var timeToBeReceivedStr = headers[Headers.TimeToBeReceived];
             var timeToBeReceived = TimeSpan.Parse(timeToBeReceivedStr);
-
             return (int)timeToBeReceived.TotalSeconds;
         }
     }
