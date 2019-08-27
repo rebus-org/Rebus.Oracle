@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Data;
 using System.Diagnostics;
 using System.Threading;
@@ -8,7 +7,6 @@ using Oracle.ManagedDataAccess.Client;
 using Oracle.ManagedDataAccess.Types;
 using Rebus.Bus;
 using Rebus.Exceptions;
-using Rebus.Extensions;
 using Rebus.Logging;
 using Rebus.Messages;
 using Rebus.Oracle.Schema;
@@ -24,6 +22,9 @@ namespace Rebus.Oracle.Transport
     /// </summary>
     public class OracleTransport : ITransport, IInitializable, IDisposable
     {
+        /// <summary>Header key of message priority which happens to be supported by this transport</summary>
+        public const string MessagePriorityHeaderKey = "rbs2-msg-priority";
+
         static readonly HeaderSerializer HeaderSerializer = new HeaderSerializer();
 
         readonly OracleFactory _factory;
@@ -38,11 +39,6 @@ namespace Rebus.Oracle.Transport
 
         /// <summary>Gets the address of the transport</summary>
         public string Address { get; }
-
-        /// <summary>
-        /// Header key of message priority which happens to be supported by this transport
-        /// </summary>
-        public const string MessagePriorityHeaderKey = "rbs2-msg-priority";
 
         /// <summary> </summary>
         /// <param name="connectionHelper"></param>
@@ -86,11 +82,11 @@ namespace Rebus.Oracle.Transport
         /// <inheritdoc />
         public Task Send(string destinationAddress, TransportMessage message, ITransactionContext context)
         {
-            var headers = message.Headers.Clone();
-            var priority = GetMessagePriority(headers);
-            var initialVisibilityDelay = new TimeSpan(0, 0, 0, GetInitialVisibilityDelay(headers));
-            var ttlSeconds = new TimeSpan(0, 0, 0, GetTtlSeconds(headers));
-            // must be last because the other functions on the headers might change them
+            var headers = message.Headers;
+            var now = _rebusTime.Now;
+            var priority = headers.GetMessagePriority();
+            var visible = headers.GetInitialVisibilityDelay(now);
+            var ttl = headers.GetTtlSeconds();
             var serializedHeaders = HeaderSerializer.Serialize(headers);
 
             var command = context.GetSendCommand(_factory, _sendSql);
@@ -106,9 +102,9 @@ namespace Rebus.Oracle.Transport
                     Headers = serializedHeaders,
                     Body = message.Body,
                     Priority = priority,
-                    Visible = initialVisibilityDelay,
-                    Now = _rebusTime.Now.ToOracleTimeStamp(),
-                    TtlSeconds = ttlSeconds,
+                    Visible = visible,
+                    Now = now.ToOracleTimeStamp(),
+                    TtlSeconds = ttl,
                 }
                 .ExecuteNonQuery();
             }
@@ -198,36 +194,5 @@ namespace Rebus.Oracle.Transport
         /// <inheritdoc />
         // Note: IAsyncTask can be disposed multiple times without side-effects
         public void Dispose() => _expiredMessagesCleanupTask?.Dispose();
-
-        static int GetMessagePriority(Dictionary<string, string> headers)
-        {
-            var valueOrNull = headers.GetValueOrNull(MessagePriorityHeaderKey);
-            if (valueOrNull == null) return 0;
-            
-            if (!int.TryParse(valueOrNull, out int priority))
-                throw new FormatException($"Could not parse '{valueOrNull}' into an Int32!");
-            
-            return priority;
-        }
-
-        int GetInitialVisibilityDelay(Dictionary<string, string> headers)
-        {
-            if (!headers.TryGetValue(Headers.DeferredUntil, out var deferredUntilDateTimeOffsetString))
-                return 0;
-
-            headers.Remove(Headers.DeferredUntil);
-            var deferredUntilTime = deferredUntilDateTimeOffsetString.ToDateTimeOffset();
-
-            return (int)(deferredUntilTime - _rebusTime.Now).TotalSeconds;
-        }
-
-        static int GetTtlSeconds(Dictionary<string, string> headers)
-        {
-            if (!headers.TryGetValue(Headers.TimeToBeReceived, out var timeToBeReceivedStr))
-                return int.MaxValue;    // about 60 years
-
-            var timeToBeReceived = TimeSpan.Parse(timeToBeReceivedStr);
-            return (int)timeToBeReceived.TotalSeconds;
-        }
     }
 }
