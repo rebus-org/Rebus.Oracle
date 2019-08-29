@@ -1,5 +1,5 @@
+using System;
 using Oracle.ManagedDataAccess.Client;
-using Oracle.ManagedDataAccess.Types;
 using Rebus.Oracle.Schema;
 
 namespace Rebus.Oracle.Transport
@@ -16,7 +16,7 @@ namespace Rebus.Oracle.Transport
 
         public static string Sql(DbName table) => 
             $@"INSERT INTO {table} (recipient,  headers,  body,  priority,  visible,         expiration)
-               VALUES               (:recipient, :headers, :body, :priority, :now + :visible, :now + :ttlseconds)";
+               VALUES              (:recipient, :headers, :body, :priority, :now + :visible, :now + :ttlseconds)";
 
         public static OracleCommand Create(UnitOfWork connection, string sql) 
         {
@@ -27,8 +27,8 @@ namespace Rebus.Oracle.Transport
             command.Parameters.Add("headers", OracleDbType.Blob);           // 1
             command.Parameters.Add("body", OracleDbType.Blob);              // 2
             command.Parameters.Add("priority", OracleDbType.Int32);         // 3
-            command.Parameters.Add("visible", OracleDbType.IntervalDS);     // 4
-            command.Parameters.Add("now", OracleDbType.TimeStampTZ);        // 5
+            command.Parameters.Add("now", OracleDbType.TimeStampTZ);        // 4
+            command.Parameters.Add("visible", OracleDbType.IntervalDS);     // 5
             command.Parameters.Add("ttlseconds", OracleDbType.IntervalDS);  // 6
             return command;
         }
@@ -37,9 +37,9 @@ namespace Rebus.Oracle.Transport
         public byte[] Headers { set => _command.Parameters[1].Value = value; }
         public byte[] Body { set => _command.Parameters[2].Value = value; }
         public int Priority { set => _command.Parameters[3].Value = value; }
-        public OracleIntervalDS Visible { set => _command.Parameters[4].Value = value; }
-        public OracleTimeStampTZ Now { set => _command.Parameters[5].Value = value; }
-        public OracleIntervalDS TtlSeconds { set => _command.Parameters[6].Value = value; }
+        public DateTimeOffset Now { set => _command.Parameters[4].Value = value.ToOracleTimeStamp(); }
+        public TimeSpan Visible { set => _command.Parameters[5].Value = value; }
+        public TimeSpan TtlSeconds { set => _command.Parameters[6].Value = value; }
 
         public int ExecuteNonQuery() => _command.ExecuteNonQuery();
     }

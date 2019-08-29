@@ -29,7 +29,7 @@ namespace Rebus.Oracle.Transport
         public static TimeSpan GetTtlSeconds(this Dictionary<string, string> headers)
         {
             if (!headers.TryGetValue(Headers.TimeToBeReceived, out var timeToBeReceivedString))
-                return TimeSpan.MaxValue; // about 10 millions days
+                return TimeSpan.FromDays(36500); // about 100 years. Don't use TimeSpan.MaxValue (~10 million days) because Oracle doesn't support dates after year 9999
 
             if (!TimeSpan.TryParse(timeToBeReceivedString, out var timeToBeReceived))
                 throw new FormatException($"Could not parse '{timeToBeReceivedString}' into a TimeSpan!");

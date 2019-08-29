@@ -102,8 +102,8 @@ namespace Rebus.Oracle.Transport
                     Headers = serializedHeaders,
                     Body = message.Body,
                     Priority = priority,
+                    Now = now,
                     Visible = visible,
-                    Now = now.ToOracleTimeStamp(),
                     TtlSeconds = ttl,
                 }
                 .ExecuteNonQuery();
