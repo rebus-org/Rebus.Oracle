@@ -26,7 +26,7 @@ namespace Rebus.Config
             {
                 var loggerFactory = c.Get<IRebusLoggerFactory>();
                 var rebusTime = c.Get<IRebusTime>();
-                var connectionHelper = new OracleConnectionHelper(connectionString, additionalConnectionSetup, enlistInAmbientTransaction);
+                var connectionHelper = new OracleFactory(connectionString, additionalConnectionSetup, enlistInAmbientTransaction);
                 var storage = new OracleDataBusStorage(connectionHelper, tableName, loggerFactory, rebusTime);
                 if (automaticallyCreateTables) storage.EnsureTableIsCreated();
                 return storage;

@@ -28,7 +28,7 @@ namespace Rebus.Oracle.Tests.Transport
         public ITransport CreateOneWayClient()
         {
             var consoleLoggerFactory = new ConsoleLoggerFactory(false);
-            var connectionHelper = new OracleConnectionHelper(OracleTestHelper.ConnectionString);
+            var connectionHelper = new OracleFactory(OracleTestHelper.ConnectionString);
             var asyncTaskFactory = new TplAsyncTaskFactory(consoleLoggerFactory);
             var transport = new OracleTransport(connectionHelper, _tableName, null, consoleLoggerFactory, asyncTaskFactory, _fakeRebusTime);
 
@@ -43,7 +43,7 @@ namespace Rebus.Oracle.Tests.Transport
         public ITransport Create(string inputQueueAddress)
         {
             var consoleLoggerFactory = new ConsoleLoggerFactory(false);
-            var connectionHelper = new OracleConnectionHelper(OracleTestHelper.ConnectionString);
+            var connectionHelper = new OracleFactory(OracleTestHelper.ConnectionString);
             var asyncTaskFactory = new TplAsyncTaskFactory(consoleLoggerFactory);
             var transport = new OracleTransport(connectionHelper, _tableName, inputQueueAddress, consoleLoggerFactory, asyncTaskFactory, _fakeRebusTime);
 

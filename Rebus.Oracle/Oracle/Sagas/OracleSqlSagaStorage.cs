@@ -23,7 +23,7 @@ namespace Rebus.Oracle.Sagas
         const string IdPropertyName = nameof(ISagaData.Id);
 
         readonly ObjectSerializer _objectSerializer = new ObjectSerializer();
-        readonly OracleConnectionHelper _connectionHelper;
+        readonly OracleFactory _connectionHelper;
         readonly DbName _dataTable;
         readonly DbName _indexTable;
         readonly ILog _log;
@@ -31,7 +31,7 @@ namespace Rebus.Oracle.Sagas
         /// <summary>
         /// Constructs the saga storage
         /// </summary>
-        public OracleSqlSagaStorage(OracleConnectionHelper connectionHelper, string dataTableName,
+        public OracleSqlSagaStorage(OracleFactory connectionHelper, string dataTableName,
             string indexTableName, IRebusLoggerFactory rebusLoggerFactory)
         {
             if (rebusLoggerFactory == null) throw new ArgumentNullException(nameof(rebusLoggerFactory));
@@ -47,9 +47,9 @@ namespace Rebus.Oracle.Sagas
         /// </summary>
         public void EnsureTablesAreCreated()
         {
-            using (var connection = _connectionHelper.GetConnection())
+            using (var connection = _connectionHelper.OpenRaw())
             {
-                if (connection.Connection.CreateRebusSaga(_dataTable, _indexTable))
+                if (connection.CreateRebusSaga(_dataTable, _indexTable))
                     _log.Info("Saga tables {tableName} (data) and {tableName} (index) do not exist - they will be created now",
                               _dataTable, _indexTable);
             }
@@ -61,7 +61,7 @@ namespace Rebus.Oracle.Sagas
         /// </summary>
         public Task<ISagaData> Find(Type sagaDataType, string propertyName, object propertyValue)
         {
-            using (var connection = _connectionHelper.GetConnection())
+            using (var connection = _connectionHelper.Open())
             {
                 using (var command = connection.CreateCommand())
                 {
@@ -83,7 +83,6 @@ namespace Rebus.Oracle.Sagas
                                 JOIN {_indexTable} i on s.id = i.saga_id 
                                 WHERE i.saga_type = :saga_type AND i.key = :key AND i.value = :value
                             ";
-                        command.BindByName = true;
                         command.Parameters.Add(new OracleParameter("key", OracleDbType.NVarchar2, propertyName, ParameterDirection.Input));
                         command.Parameters.Add(new OracleParameter("saga_type", OracleDbType.NVarchar2, GetSagaTypeName(sagaDataType), ParameterDirection.Input));
                         command.Parameters.Add(new OracleParameter("value", OracleDbType.NVarchar2, (propertyValue ?? "").ToString(), ParameterDirection.Input));
@@ -144,11 +143,10 @@ namespace Rebus.Oracle.Sagas
                         $"Attempted to insert saga data with ID {sagaData.Id} and revision {sagaData.Revision}, but revision must be 0 on first insert!");
                 }
 
-                using (var connection = _connectionHelper.GetConnection())
+                using (var connection = _connectionHelper.Open())
                 {
                     using (var command = connection.CreateCommand())
                     {
-                        command.BindByName = true;
                         command.Parameters.Add("id", OracleDbType.Raw).Value = sagaData.Id;
                         command.Parameters.Add("revision", OracleDbType.Int64).Value = sagaData.Revision;
                         command.Parameters.Add("data", OracleDbType.Blob).Value = _objectSerializer.Serialize(sagaData);
@@ -198,7 +196,7 @@ namespace Rebus.Oracle.Sagas
         {
             try
             {
-                using (var connection = _connectionHelper.GetConnection())
+                using (var connection = _connectionHelper.Open())
                 {
                     var revisionToUpdate = sagaData.Revision;
 
@@ -209,7 +207,6 @@ namespace Rebus.Oracle.Sagas
                     // first, delete existing index
                     using (var command = connection.CreateCommand())
                     {
-                        command.BindByName = true;
                         command.CommandText = $@"DELETE FROM {_indexTable} WHERE saga_id = :id";
                         command.Parameters.Add("id", OracleDbType.Raw).Value = sagaData.Id;
                         command.ExecuteNonQuery();
@@ -222,7 +219,6 @@ namespace Rebus.Oracle.Sagas
                         command.Parameters.Add("current_revision", OracleDbType.Int64).Value = revisionToUpdate;
                         command.Parameters.Add("next_revision", OracleDbType.Int64).Value = nextRevision;
                         command.Parameters.Add("data", OracleDbType.Blob).Value = _objectSerializer.Serialize(sagaData);
-                        command.BindByName = true;
 
                         command.CommandText =
                             $@"
@@ -265,7 +261,7 @@ namespace Rebus.Oracle.Sagas
         {
             try
             {
-                using (var connection = _connectionHelper.GetConnection())
+                using (var connection = _connectionHelper.Open())
                 {
                     using (var command = connection.CreateCommand())
                     {
@@ -296,7 +292,6 @@ namespace Rebus.Oracle.Sagas
                                 FROM {_indexTable} 
                                 WHERE saga_id = :id
                             ";
-                        command.BindByName = true;
                         command.Parameters.Add("id", OracleDbType.Raw).Value = sagaData.Id;
 
                         command.ExecuteNonQuery();
@@ -316,7 +311,7 @@ namespace Rebus.Oracle.Sagas
             }
         }
 
-        void CreateIndex(ISagaData sagaData, OracleDbConnection connection,
+        void CreateIndex(ISagaData sagaData, UnitOfWork connection,
             IEnumerable<KeyValuePair<string, string>> propertiesToIndex)
         {
             var sagaTypeName = GetSagaTypeName(sagaData.GetType());
@@ -336,7 +331,6 @@ namespace Rebus.Oracle.Sagas
                 // generate batch insert with SQL for each entry in the index
                 command.CommandText =
                     $@"INSERT INTO {_indexTable} (saga_type, key, value, saga_id) VALUES (:saga_type, :key, :value, :saga_id)";
-                command.BindByName = true;
                 command.ArrayBindCount = parameters.Count;
                 command.Parameters.Add(new OracleParameter("saga_type", OracleDbType.NVarchar2, parameters.Select(x => x.SagaType).ToArray(), ParameterDirection.Input));
                 command.Parameters.Add(new OracleParameter("key", OracleDbType.NVarchar2, parameters.Select(x => x.PropertyName).ToArray(), ParameterDirection.Input));

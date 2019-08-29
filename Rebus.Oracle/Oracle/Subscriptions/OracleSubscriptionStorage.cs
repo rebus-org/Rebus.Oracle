@@ -17,7 +17,7 @@ namespace Rebus.Oracle.Subscriptions
     {
         const int UniqueKeyViolation = 1;
 
-        readonly OracleConnectionHelper _connectionHelper;
+        readonly OracleFactory _connectionHelper;
         readonly DbName _table;
         readonly ILog _log;
 
@@ -26,7 +26,7 @@ namespace Rebus.Oracle.Subscriptions
         /// If <paramref name="isCentralized"/> is true, subscribing/unsubscribing will be short-circuited by manipulating
         /// subscriptions directly, instead of requesting via messages
         /// </summary>
-        public OracleSubscriptionStorage(OracleConnectionHelper connectionHelper, string tableName, bool isCentralized, IRebusLoggerFactory rebusLoggerFactory)
+        public OracleSubscriptionStorage(OracleFactory connectionHelper, string tableName, bool isCentralized, IRebusLoggerFactory rebusLoggerFactory)
         {
             if (rebusLoggerFactory == null) throw new ArgumentNullException(nameof(rebusLoggerFactory));
             _connectionHelper = connectionHelper ?? throw new ArgumentNullException(nameof(connectionHelper));
@@ -40,9 +40,9 @@ namespace Rebus.Oracle.Subscriptions
         /// </summary>
         public void EnsureTableIsCreated()
         {
-            using (var connection = _connectionHelper.GetConnection())
+            using (var connection = _connectionHelper.OpenRaw())
             {
-                if (connection.Connection.CreateRebusSubscription(_table))
+                if (connection.CreateRebusSubscription(_table))
                     _log.Info("Table {tableName} does not exist - it will be created now", _table);
             }
         }
@@ -52,11 +52,10 @@ namespace Rebus.Oracle.Subscriptions
         /// </summary>
         public Task<string[]> GetSubscriberAddresses(string topic)
         {
-            using (var connection = _connectionHelper.GetConnection())
+            using (var connection = _connectionHelper.Open())
             using (var command = connection.CreateCommand())
             {
                 command.CommandText = $@"select address from {_table} where topic = :topic";
-                command.BindByName = true;
 
                 command.Parameters.Add(new OracleParameter("topic", OracleDbType.Varchar2, topic, ParameterDirection.Input));
 
@@ -79,13 +78,12 @@ namespace Rebus.Oracle.Subscriptions
         /// </summary>
         public Task RegisterSubscriber(string topic, string subscriberAddress)
         {
-            using (var connection = _connectionHelper.GetConnection())
+            using (var connection = _connectionHelper.Open())
             using (var command = connection.CreateCommand())
             {
                 command.CommandText =
                     $@"insert into {_table} (topic, address) values (:topic, :address)";
 
-                command.BindByName = true;
                 command.Parameters.Add(new OracleParameter("topic", OracleDbType.Varchar2, topic, ParameterDirection.Input));
                 command.Parameters.Add(new OracleParameter("address", OracleDbType.Varchar2, subscriberAddress, ParameterDirection.Input));
 
@@ -108,13 +106,12 @@ namespace Rebus.Oracle.Subscriptions
         /// </summary>
         public Task UnregisterSubscriber(string topic, string subscriberAddress)
         {
-            using (var connection = _connectionHelper.GetConnection())
+            using (var connection = _connectionHelper.Open())
             using (var command = connection.CreateCommand())
             {
                 command.CommandText =
                     $@"delete from {_table} where topic = :topic and address = :address";
 
-                command.BindByName = true;
                 command.Parameters.Add(new OracleParameter("topic", OracleDbType.Varchar2, topic, ParameterDirection.Input));
                 command.Parameters.Add(new OracleParameter("address", OracleDbType.Varchar2, subscriberAddress, ParameterDirection.Input));
 

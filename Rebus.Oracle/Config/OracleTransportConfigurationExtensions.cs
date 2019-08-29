@@ -23,7 +23,7 @@ namespace Rebus.Config
         /// </summary>
         public static void UseOracle(this StandardConfigurer<ITransport> configurer, string connectionStringOrConnectionOrConnectionStringName, string tableName, string inputQueueName, bool enlistInAmbientTransaction = false, bool automaticallyCreateTables = true)
         {
-            Configure(configurer, loggerFactory => new OracleConnectionHelper(connectionStringOrConnectionOrConnectionStringName, enlistInAmbientTransaction), tableName, inputQueueName, automaticallyCreateTables);
+            Configure(configurer, loggerFactory => new OracleFactory(connectionStringOrConnectionOrConnectionStringName, null, enlistInAmbientTransaction), tableName, inputQueueName, automaticallyCreateTables);
         }
 
         /// <summary>
@@ -33,12 +33,12 @@ namespace Rebus.Config
         /// </summary>
         public static void UseOracleAsOneWayClient(this StandardConfigurer<ITransport> configurer, string connectionStringOrConnectionStringName, string tableName, bool enlistInAmbientTransaction = false, bool automaticallyCreateTables = true)
         {
-            Configure(configurer, loggerFactory => new OracleConnectionHelper(connectionStringOrConnectionStringName, enlistInAmbientTransaction), tableName, null, automaticallyCreateTables);
+            Configure(configurer, loggerFactory => new OracleFactory(connectionStringOrConnectionStringName, null, enlistInAmbientTransaction), tableName, null, automaticallyCreateTables);
 
             OneWayClientBackdoor.ConfigureOneWayClient(configurer);
         }
 
-        static void Configure(StandardConfigurer<ITransport> configurer, Func<IRebusLoggerFactory, OracleConnectionHelper> connectionProviderFactory, string tableName, string inputQueueName, bool automaticallyCreateTables = true)
+        static void Configure(StandardConfigurer<ITransport> configurer, Func<IRebusLoggerFactory, OracleFactory> connectionProviderFactory, string tableName, string inputQueueName, bool automaticallyCreateTables = true)
         {
             configurer.Register(context =>
             {

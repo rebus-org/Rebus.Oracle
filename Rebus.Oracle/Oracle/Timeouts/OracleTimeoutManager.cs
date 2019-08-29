@@ -22,7 +22,7 @@ namespace Rebus.Oracle.Timeouts
     public class OracleTimeoutManager : ITimeoutManager
     {
         readonly DictionarySerializer _dictionarySerializer = new DictionarySerializer();
-        readonly OracleConnectionHelper _connectionHelper;
+        readonly OracleFactory _connectionHelper;
         readonly DbName _table;
         readonly ILog _log;
         readonly IRebusTime _rebusTime;
@@ -30,7 +30,7 @@ namespace Rebus.Oracle.Timeouts
         /// <summary>
         /// Constructs the timeout manager
         /// </summary>
-        public OracleTimeoutManager(OracleConnectionHelper connectionHelper, string tableName, IRebusLoggerFactory rebusLoggerFactory, IRebusTime rebusTime)
+        public OracleTimeoutManager(OracleFactory connectionHelper, string tableName, IRebusLoggerFactory rebusLoggerFactory, IRebusTime rebusTime)
         {
             if (rebusLoggerFactory == null) throw new ArgumentNullException(nameof(rebusLoggerFactory));
             _connectionHelper = connectionHelper ?? throw new ArgumentNullException(nameof(connectionHelper));
@@ -44,13 +44,12 @@ namespace Rebus.Oracle.Timeouts
         /// </summary>
         public Task Defer(DateTimeOffset approximateDueTime, Dictionary<string, string> headers, byte[] body)
         {
-            using (var connection = _connectionHelper.GetConnection())
+            using (var connection = _connectionHelper.Open())
             {
                 using (var command = connection.CreateCommand())
                 {
                     command.CommandText =
                         $@"INSERT INTO {_table} (due_time, headers, body) VALUES (:due_time, :headers, :body)"; 
-                    command.BindByName = true;
                     command.Parameters.Add(new OracleParameter("due_time", OracleDbType.TimeStampTZ, approximateDueTime.ToOracleTimeStamp(), ParameterDirection.Input));
                     command.Parameters.Add(new OracleParameter("headers", OracleDbType.Clob, _dictionarySerializer.SerializeToString(headers), ParameterDirection.Input));
                     command.Parameters.Add(new OracleParameter("body", OracleDbType.Blob, body, ParameterDirection.Input));
@@ -67,7 +66,7 @@ namespace Rebus.Oracle.Timeouts
         /// </summary>
         public Task<DueMessagesResult> GetDueMessages()
         {
-            var connection = _connectionHelper.GetConnection();
+            var connection = _connectionHelper.Open();
 
             try
             {
@@ -79,7 +78,6 @@ namespace Rebus.Oracle.Timeouts
                         WHERE due_time <= :current_time 
                         ORDER BY due_time
                         FOR UPDATE";
-                    command.BindByName = true;
                     command.Parameters.Add(new OracleParameter("current_time", _rebusTime.Now.ToOracleTimeStamp()));
 
                     using (var reader = command.ExecuteReader())
@@ -96,7 +94,6 @@ namespace Rebus.Oracle.Timeouts
                             {
                                 using (var deleteCommand = connection.CreateCommand())
                                 {
-                                    deleteCommand.BindByName = true;
                                     deleteCommand.CommandText = $@"DELETE FROM {_table} WHERE id = :id";
                                     deleteCommand.Parameters.Add(new OracleParameter("id", OracleDbType.Int64, id, ParameterDirection.Input));
                                     deleteCommand.ExecuteNonQuery();
@@ -126,9 +123,9 @@ namespace Rebus.Oracle.Timeouts
         /// </summary>
         public void EnsureTableIsCreated()
         {
-            using (var connection = _connectionHelper.GetConnection())
+            using (var connection = _connectionHelper.OpenRaw())
             {
-                if (connection.Connection.CreateRebusTimeout(_table))
+                if (connection.CreateRebusTimeout(_table))
                     _log.Info("Table {tableName} does not exist - it will be created now", _table);
             }
         }

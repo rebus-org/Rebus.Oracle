@@ -27,7 +27,7 @@ namespace Rebus.Oracle.Tests.Transport
         {
             var consoleLoggerFactory = new ConsoleLoggerFactory(false);
             var asyncTaskFactory = new TplAsyncTaskFactory(consoleLoggerFactory);
-            var connectionHelper = new OracleConnectionHelper(OracleTestHelper.ConnectionString);
+            var connectionHelper = new OracleFactory(OracleTestHelper.ConnectionString);
             _transport = new OracleTransport(connectionHelper, _tableName, QueueName, consoleLoggerFactory, asyncTaskFactory, new FakeRebusTime());
             _transport.EnsureTableIsCreated();
 

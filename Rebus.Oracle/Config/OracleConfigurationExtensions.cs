@@ -27,7 +27,7 @@ namespace Rebus.Config
         {
             configurer.Register(c =>
             {
-                var sagaStorage = new OracleSagaSnapshotStorage(new OracleConnectionHelper(connectionString, additionalConnectionSetup, enlistInAmbientTransaction), tableName);
+                var sagaStorage = new OracleSagaSnapshotStorage(new OracleFactory(connectionString, additionalConnectionSetup, enlistInAmbientTransaction), tableName);
 
                 if (automaticallyCreateTables)
                 {
@@ -48,7 +48,7 @@ namespace Rebus.Config
             configurer.Register(c =>
             {
                 var rebusLoggerFactory = c.Get<IRebusLoggerFactory>();
-                var sagaStorage = new OracleSqlSagaStorage(new OracleConnectionHelper(connectionString, additionalConnectionSetup, enlistInAmbientTransaction), dataTableName, indexTableName, rebusLoggerFactory);
+                var sagaStorage = new OracleSqlSagaStorage(new OracleFactory(connectionString, additionalConnectionSetup, enlistInAmbientTransaction), dataTableName, indexTableName, rebusLoggerFactory);
 
                 if (automaticallyCreateTables)
                 {
@@ -70,7 +70,7 @@ namespace Rebus.Config
             {
                 var rebusLoggerFactory = c.Get<IRebusLoggerFactory>();
                 var rebusTime = c.Get<IRebusTime>();
-                var subscriptionStorage = new OracleTimeoutManager(new OracleConnectionHelper(connectionString, additionalConnectionSetup, enlistInAmbientTransaction), tableName, rebusLoggerFactory, rebusTime);
+                var subscriptionStorage = new OracleTimeoutManager(new OracleFactory(connectionString, additionalConnectionSetup, enlistInAmbientTransaction), tableName, rebusLoggerFactory, rebusTime);
 
                 if (automaticallyCreateTables)
                 {
@@ -93,7 +93,7 @@ namespace Rebus.Config
             configurer.Register(c =>
             {
                 var rebusLoggerFactory = c.Get<IRebusLoggerFactory>();
-                var connectionHelper = new OracleConnectionHelper(connectionString, additionalConnectionSetup, enlistInAmbientTransaction);
+                var connectionHelper = new OracleFactory(connectionString, additionalConnectionSetup, enlistInAmbientTransaction);
                 var subscriptionStorage = new OracleSubscriptionStorage(
                     connectionHelper, tableName, isCentralized, rebusLoggerFactory);
 

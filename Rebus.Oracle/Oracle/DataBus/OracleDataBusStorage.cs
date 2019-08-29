@@ -22,7 +22,7 @@ namespace Rebus.Oracle.DataBus
     {
         static readonly Encoding TextEncoding = Encoding.UTF8;
         readonly DictionarySerializer _dictionarySerializer = new DictionarySerializer();
-        readonly OracleConnectionHelper _connectionHelper;
+        readonly OracleFactory _connectionHelper;
         readonly DbName _table;
         readonly ILog _log;
         readonly IRebusTime _rebusTime;
@@ -30,7 +30,7 @@ namespace Rebus.Oracle.DataBus
         /// <summary>
         /// Creates the data storage
         /// </summary>
-        public OracleDataBusStorage(OracleConnectionHelper connectionHelper, string tableName, IRebusLoggerFactory rebusLoggerFactory, IRebusTime rebusTime)
+        public OracleDataBusStorage(OracleFactory connectionHelper, string tableName, IRebusLoggerFactory rebusLoggerFactory, IRebusTime rebusTime)
         {
             if (rebusLoggerFactory == null) throw new ArgumentNullException(nameof(rebusLoggerFactory));
             _connectionHelper = connectionHelper ?? throw new ArgumentNullException(nameof(connectionHelper));
@@ -44,9 +44,9 @@ namespace Rebus.Oracle.DataBus
         /// </summary>
         public void EnsureTableIsCreated()
         {
-            using (var connection = _connectionHelper.GetConnection())
+            using (var connection = _connectionHelper.OpenRaw())
             {
-                if (connection.Connection.CreateRebusDataBus(_table))
+                if (connection.CreateRebusDataBus(_table))
                     _log.Info("Creating data bus table {tableName}", _table);
                 else
                     _log.Info("Database already contains a table named {tableName} - will not create anything", _table);
@@ -60,7 +60,7 @@ namespace Rebus.Oracle.DataBus
         {
             try
             {
-                using (var connection = _connectionHelper.GetConnection())
+                using (var connection = _connectionHelper.Open())
                 {
                     using (var blob = connection.CreateBlob())
                     {
@@ -73,7 +73,6 @@ namespace Rebus.Oracle.DataBus
                                 TextEncoding.GetBytes(_dictionarySerializer.SerializeToString(metadata));
 
                             command.CommandText = $"INSERT INTO {_table} (id, meta, data, creationTime) VALUES (:id, :meta, :data, :now)";
-                            command.BindByName = true;
                             command.Parameters.Add("id", id);
                             command.Parameters.Add("meta", (object)metadataBytes ?? DBNull.Value);
                             command.Parameters.Add("data", blob);
@@ -103,14 +102,12 @@ namespace Rebus.Oracle.DataBus
                 // update last read time quickly
                 UpdateLastReadTime(id);
 
-                OracleDbConnection connection = null;
                 OracleCommand command = null;
                 OracleDataReader reader = null;
+                UnitOfWork connection = _connectionHelper.Open();
 
                 try
                 {
-                    connection = _connectionHelper.GetConnection();
-
                     command = connection.CreateCommand();
                     command.CommandText = $"SELECT data FROM {_table} WHERE id = :id";
                     command.Parameters.Add("id", id);
@@ -130,7 +127,7 @@ namespace Rebus.Oracle.DataBus
                     // if something of the above fails, we did not pass ownership to someone who can dispose it... therefore:
                     reader?.Dispose();
                     command?.Dispose();
-                    connection?.Dispose();
+                    connection.Dispose();
                     throw;
                 }
             }
@@ -143,19 +140,18 @@ namespace Rebus.Oracle.DataBus
 
         void UpdateLastReadTime(string id)
         {
-            using (var connection = _connectionHelper.GetConnection())
+            using (var connection = _connectionHelper.Open())
             {
                 UpdateLastReadTime(id, connection);
                 connection.Complete();
             }
         }
 
-        void UpdateLastReadTime(string id, OracleDbConnection connection)
+        void UpdateLastReadTime(string id, UnitOfWork connection)
         {
             using (var command = connection.CreateCommand())
             {
                 command.CommandText = $"UPDATE {_table} SET lastReadTime = :now WHERE id = :id";
-                command.BindByName = true;
                 command.Parameters.Add("now", _rebusTime.Now.ToOracleTimeStamp());
                 command.Parameters.Add("id", id);
                 command.ExecuteNonQuery();
@@ -169,7 +165,7 @@ namespace Rebus.Oracle.DataBus
         {
             try
             {
-                using (var connection =  _connectionHelper.GetConnection())
+                using (var connection = _connectionHelper.Open())
                 using (var command = connection.CreateCommand())
                 {
                     command.CommandText = $"SELECT meta, creationTime, lastReadTime, LENGTHB(data) AS dataLength FROM {_table} WHERE id = :id";

@@ -16,13 +16,13 @@ namespace Rebus.Oracle.Sagas
     {
         readonly ObjectSerializer _objectSerializer = new ObjectSerializer();
         readonly DictionarySerializer _dictionarySerializer = new DictionarySerializer();
-        readonly OracleConnectionHelper _connectionHelper;
+        readonly OracleFactory _connectionHelper;
         readonly DbName _table;
 
         /// <summary>
         /// Constructs the storage
         /// </summary>
-        public OracleSagaSnapshotStorage(OracleConnectionHelper connectionHelper, string tableName)
+        public OracleSagaSnapshotStorage(OracleFactory connectionHelper, string tableName)
         {
             _connectionHelper = connectionHelper ?? throw new ArgumentNullException(nameof(connectionHelper));
             _table = new DbName(tableName) ?? throw new ArgumentNullException(nameof(tableName));
@@ -33,7 +33,7 @@ namespace Rebus.Oracle.Sagas
         /// </summary>
         public Task Save(ISagaData sagaData, Dictionary<string, string> sagaAuditMetadata)
         {
-            using (var connection = _connectionHelper.GetConnection())
+            using (var connection = _connectionHelper.Open())
             {
                 using (var command = connection.CreateCommand())
                 {
@@ -43,7 +43,6 @@ namespace Rebus.Oracle.Sagas
                             INTO {_table} (id, revision, data, metadata)
                             VALUES (:id, :revision, :data, :metadata)
                         ";
-                    command.BindByName = true;
                     command.Parameters.Add("id", OracleDbType.Raw).Value = sagaData.Id;
                     command.Parameters.Add("revision", OracleDbType.Int64).Value = sagaData.Revision;
                     command.Parameters.Add("data", OracleDbType.Blob).Value = _objectSerializer.Serialize(sagaData);
@@ -63,9 +62,9 @@ namespace Rebus.Oracle.Sagas
         /// </summary>
         public void EnsureTableIsCreated()
         {
-            using (var connection = _connectionHelper.GetConnection())
+            using (var connection = _connectionHelper.OpenRaw())
             {
-                connection.Connection.CreateRebusSagaSnapshot(_table);
+                connection.CreateRebusSagaSnapshot(_table);
             }
         }
     }
