@@ -34,6 +34,7 @@ namespace Rebus.Oracle.Transport
         readonly AsyncBottleneck _receiveBottleneck = new AsyncBottleneck(20);
         readonly IAsyncTask _expiredMessagesCleanupTask;
         readonly ILog _log;
+        readonly IRebusTime _rebusTime;
 
         bool _disposed;
 
@@ -57,12 +58,14 @@ namespace Rebus.Oracle.Transport
         /// <param name="inputQueueName"></param>
         /// <param name="rebusLoggerFactory"></param>
         /// <param name="asyncTaskFactory"></param>
-        public OracleTransport(OracleConnectionHelper connectionHelper, string tableName, string inputQueueName, IRebusLoggerFactory rebusLoggerFactory, IAsyncTaskFactory asyncTaskFactory)
+        /// <param name="rebusTime"></param>
+        public OracleTransport(OracleConnectionHelper connectionHelper, string tableName, string inputQueueName, IRebusLoggerFactory rebusLoggerFactory, IAsyncTaskFactory asyncTaskFactory, IRebusTime rebusTime)
         {
             if (rebusLoggerFactory == null) throw new ArgumentNullException(nameof(rebusLoggerFactory));
             if (asyncTaskFactory == null) throw new ArgumentNullException(nameof(asyncTaskFactory));
 
             _log = rebusLoggerFactory.GetLogger<OracleTransport>();
+            _rebusTime = rebusTime ?? throw new ArgumentNullException(nameof(rebusTime));
             _connectionHelper = connectionHelper ?? throw new ArgumentNullException(nameof(connectionHelper));
             _tableName = tableName ?? throw new ArgumentNullException(nameof(tableName));
             _inputQueueName = inputQueueName;
@@ -127,14 +130,14 @@ namespace Rebus.Oracle.Transport
                         :headers,
                         :body,
                         :priority,
-                        systimestamp(6) + :visible,
-                        systimestamp(6) + :ttlseconds
+                        :now + :visible,
+                        :now + :ttlseconds
                     )";
 
                 var headers = message.Headers.Clone();
 
                 var priority = GetMessagePriority(headers);
-                var initialVisibilityDelay = new TimeSpan(0, 0, 0, GetInitialVisibilityDelay(headers));
+                var initialVisibilityDelay = new TimeSpan(0, 0, 0, GetInitialVisibilityDelay(headers, _rebusTime.Now));
                 var ttlSeconds = new TimeSpan(0, 0, 0, GetTtlSeconds(headers));
 
                 // must be last because the other functions on the headers might change them
@@ -144,6 +147,7 @@ namespace Rebus.Oracle.Transport
                 command.Parameters.Add(new OracleParameter("headers", OracleDbType.Blob, serializedHeaders, ParameterDirection.Input));
                 command.Parameters.Add(new OracleParameter("body", OracleDbType.Blob, message.Body, ParameterDirection.Input));
                 command.Parameters.Add(new OracleParameter("priority", OracleDbType.Int64, priority, ParameterDirection.Input));
+                command.Parameters.Add(new OracleParameter("now", OracleDbType.TimeStampTZ, _rebusTime.Now.ToUniversalTime().DateTime, ParameterDirection.Input));
                 command.Parameters.Add(new OracleParameter("visible", OracleDbType.IntervalDS, initialVisibilityDelay, ParameterDirection.Input));
                 command.Parameters.Add(new OracleParameter("ttlseconds", OracleDbType.IntervalDS, ttlSeconds, ParameterDirection.Input));
 
@@ -165,6 +169,7 @@ namespace Rebus.Oracle.Transport
                     selectCommand.CommandText = $"rebus_dequeue_{_tableName}";
                     selectCommand.CommandType = CommandType.StoredProcedure;
                     selectCommand.Parameters.Add(new OracleParameter("recipientQueue", OracleDbType.VarChar, _inputQueueName, ParameterDirection.Input));
+                    selectCommand.Parameters.Add(new OracleParameter("now", OracleDbType.TimeStampTZ, _rebusTime.Now.ToUniversalTime().DateTime, ParameterDirection.Input));
                     selectCommand.Parameters.Add(new OracleParameter("output", OracleDbType.Cursor ,ParameterDirection.Output));
                     selectCommand.InitialLobFetchSize = -1;
 
@@ -212,9 +217,10 @@ namespace Rebus.Oracle.Transport
                             $@"
                             delete from {_tableName} 
                             where recipient = :recipient 
-                            and expiration < systimestamp(6)
+                            and expiration < :now
                             ";
                         command.Parameters.Add(new OracleParameter("recipient", OracleDbType.VarChar, _inputQueueName, ParameterDirection.Input));
+                        command.Parameters.Add(new OracleParameter("now", OracleDbType.TimeStampTZ, _rebusTime.Now.ToUniversalTime().DateTime, ParameterDirection.Input));
                         affectedRows = await command.ExecuteNonQueryAsync();
                     }
 
@@ -273,8 +279,8 @@ CREATE TABLE {_tableName}
     id NUMBER(20) NOT NULL,
     recipient VARCHAR2(255) NOT NULL,
     priority NUMBER(20) NOT NULL,
-    expiration timestamp(7) with time zone NOT NULL,
-    visible timestamp(7) with time zone NOT NULL,
+    expiration timestamp with time zone NOT NULL,
+    visible timestamp with time zone NOT NULL,
     headers blob NOT NULL,
     body blob NOT NULL
 )
@@ -299,7 +305,7 @@ CREATE INDEX idx_receive_{_tableName} ON {_tableName}
     visible ASC
 )
 ----
-create or replace PROCEDURE rebus_dequeue_{_tableName}(recipientQueue IN varchar, output OUT SYS_REFCURSOR ) AS
+create or replace PROCEDURE rebus_dequeue_{_tableName}(recipientQueue IN varchar, now IN timestamp with time zone, output OUT SYS_REFCURSOR ) AS
   messageId number;
   readCursor SYS_REFCURSOR; 
 begin
@@ -308,9 +314,9 @@ begin
     SELECT id
     FROM {_tableName}
     WHERE recipient = recipientQueue
-            and visible < current_timestamp(6)
-            and expiration > current_timestamp(6)          
-    ORDER BY priority ASC, id ASC
+            and visible < now
+            and expiration > now         
+    ORDER BY priority ASC, visible ASC, id ASC
     for update skip locked;
     
     fetch readCursor into messageId;
@@ -419,7 +425,7 @@ END;
             }
         }
 
-        static int GetInitialVisibilityDelay(IDictionary<string, string> headers)
+        static int GetInitialVisibilityDelay(IDictionary<string, string> headers, DateTimeOffset now)
         {
             if (!headers.TryGetValue(Headers.DeferredUntil, out var deferredUntilDateTimeOffsetString))
             {
@@ -430,7 +436,7 @@ END;
 
             headers.Remove(Headers.DeferredUntil);
 
-            return (int)(deferredUntilTime - RebusTime.Now).TotalSeconds;
+            return (int)(deferredUntilTime - now).TotalSeconds;
         }
 
         static int GetTtlSeconds(IReadOnlyDictionary<string, string> headers)

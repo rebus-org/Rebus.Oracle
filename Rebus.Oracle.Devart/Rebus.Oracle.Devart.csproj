@@ -24,7 +24,7 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Devart.Data.Oracle" Version="9.5.454" />
-    <PackageReference Include="Rebus" Version="4.2.1" />
+    <PackageReference Include="Rebus" Version="6.0.0-b11" />
   </ItemGroup>
 
 </Project>

@@ -8,6 +8,7 @@ using Rebus.Oracle.Subscriptions;
 using Rebus.Oracle.Timeouts;
 using Rebus.Sagas;
 using Rebus.Subscriptions;
+using Rebus.Time;
 using Rebus.Timeouts;
 
 namespace Rebus.Config
@@ -68,7 +69,8 @@ namespace Rebus.Config
             configurer.Register(c =>
             {
                 var rebusLoggerFactory = c.Get<IRebusLoggerFactory>();
-                var subscriptionStorage = new OracleTimeoutManager(new OracleConnectionHelper(connectionString, additionalConnectionSetup, enlistInAmbientTransaction), tableName, rebusLoggerFactory);
+                var rebusTime = c.Get<IRebusTime>();
+                var subscriptionStorage = new OracleTimeoutManager(new OracleConnectionHelper(connectionString, additionalConnectionSetup, enlistInAmbientTransaction), tableName, rebusLoggerFactory, rebusTime);
 
                 if (automaticallyCreateTables)
                 {
