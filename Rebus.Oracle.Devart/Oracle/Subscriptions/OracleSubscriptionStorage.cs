@@ -4,6 +4,7 @@ using System.Data;
 using System.Linq;
 using System.Threading.Tasks;
 using Devart.Data.Oracle;
+using Rebus.Exceptions;
 using Rebus.Logging;
 using Rebus.Subscriptions;
 
@@ -137,7 +138,7 @@ CREATE TABLE {_tableName} (
                 }
                 catch (OracleException exception)
                 {
-                    Console.WriteLine(exception);
+                    throw new RebusApplicationException(exception, "Failed to delete subscription from storage");
                 }
 
                 connection.Complete();

@@ -29,6 +29,7 @@ namespace Rebus.Oracle.Transport
 
         readonly OracleConnectionHelper _connectionHelper;
         readonly string _tableName;
+        readonly string _inputQueueName;
         readonly AsyncBottleneck _receiveBottleneck = new AsyncBottleneck(20);
         readonly IAsyncTask _expiredMessagesCleanupTask;
         readonly ILog _log;

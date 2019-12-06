@@ -20,7 +20,7 @@ namespace Rebus.Oracle.Sagas
     /// </summary>
     public class OracleSqlSagaStorage : ISagaStorage
     {
-        static readonly string IdPropertyName = Reflect.Path<ISagaData>(d => d.Id);
+        const string IdPropertyName = nameof(ISagaData.Id);
 
         readonly ObjectSerializer _objectSerializer = new ObjectSerializer();
         readonly OracleConnectionHelper _connectionHelper;
@@ -43,7 +43,7 @@ namespace Rebus.Oracle.Sagas
 
         /// <summary>
         /// Checks to see if the configured saga data and saga index table exists. If they both exist, we'll continue, if
-        /// neigther of them exists, we'll try to create them. If one of them exists, we'll throw an error.
+        /// neither of them exists, we'll try to create them. If one of them exists, we'll throw an error.
         /// </summary>
         public void EnsureTablesAreCreated()
         {
