@@ -9,7 +9,6 @@ using Devart.Data.Oracle;
 using Rebus.Bus;
 using Rebus.Exceptions;
 using Rebus.Extensions;
-using Rebus.Internals;
 using Rebus.Logging;
 using Rebus.Messages;
 using Rebus.Serialization;
@@ -30,7 +29,6 @@ namespace Rebus.Oracle.Transport
 
         readonly OracleConnectionHelper _connectionHelper;
         readonly string _tableName;
-        readonly string _inputQueueName;
         readonly AsyncBottleneck _receiveBottleneck = new AsyncBottleneck(20);
         readonly IAsyncTask _expiredMessagesCleanupTask;
         readonly ILog _log;
@@ -94,7 +92,7 @@ namespace Rebus.Oracle.Transport
         /// <inheritdoc />
         public async Task Send(string destinationAddress, TransportMessage message, ITransactionContext context)
         {
-            var connection = await GetConnection(context);
+            var connection = GetConnection(context);
             var semaphore = connection.Semaphore;
 
             // serialize access to the connection
@@ -102,7 +100,7 @@ namespace Rebus.Oracle.Transport
 
             try
             {
-                await InnerSend(destinationAddress, message, connection);
+                InnerSend(destinationAddress, message, connection);
             }
             finally
             {
@@ -110,7 +108,7 @@ namespace Rebus.Oracle.Transport
             }
         }
 
-        async Task InnerSend(string destinationAddress, TransportMessage message, ConnectionWrapper connection)
+        void InnerSend(string destinationAddress, TransportMessage message, ConnectionWrapper connection)
         {
             using (var command = connection.Connection.CreateCommand())
             {
@@ -151,7 +149,7 @@ namespace Rebus.Oracle.Transport
                 command.Parameters.Add(new OracleParameter("visible", OracleDbType.IntervalDS, initialVisibilityDelay, ParameterDirection.Input));
                 command.Parameters.Add(new OracleParameter("ttlseconds", OracleDbType.IntervalDS, ttlSeconds, ParameterDirection.Input));
 
-                await command.ExecuteNonQueryAsync();
+                command.ExecuteNonQuery();
             }
         }
 
@@ -160,9 +158,7 @@ namespace Rebus.Oracle.Transport
         {
             using (await _receiveBottleneck.Enter(cancellationToken))
             {
-                var connection = await GetConnection(context);
-
-                TransportMessage receivedTransportMessage;
+                var connection = GetConnection(context);
 
                 using (var selectCommand = connection.Connection.CreateCommand())
                 {
@@ -172,35 +168,25 @@ namespace Rebus.Oracle.Transport
                     selectCommand.Parameters.Add(new OracleParameter("now", OracleDbType.TimeStampTZ, _rebusTime.Now.ToUniversalTime().DateTime, ParameterDirection.Input));
                     selectCommand.Parameters.Add(new OracleParameter("output", OracleDbType.Cursor ,ParameterDirection.Output));
                     selectCommand.InitialLobFetchSize = -1;
+                    selectCommand.ExecuteNonQuery();
 
-                    try
-                    {
-                        selectCommand.ExecuteNonQuery();
-                        using (var reader = (selectCommand.Parameters["output"].Value as OracleCursor).GetDataReader()){
-                            if (!await reader.ReadAsync(cancellationToken))
-                            {
-                                return null;
-                            }
-
-                            var headers = reader["headers"];
-                            var headersDictionary = HeaderSerializer.Deserialize((byte[])headers);
-                            var body = (byte[])reader["body"];
-
-                            receivedTransportMessage = new TransportMessage(headersDictionary, body);
+                    using (var reader = (selectCommand.Parameters["output"].Value as OracleCursor).GetDataReader()){
+                        if (!reader.Read())
+                        {
+                            return null;
                         }
-                    }
-                    catch (OracleException exception) when (exception.Code == OperationCancelledNumber)
-                    {
-                        // ADO.NET does not throw the right exception when the task gets cancelled - therefore we need to do this:
-                        throw new TaskCanceledException("Receive operation was cancelled", exception);
+
+                        var headers = (byte[])reader["headers"];
+                        var body = (byte[])reader["body"];
+                        var headersDictionary = HeaderSerializer.Deserialize(headers);
+
+                        return new TransportMessage(headersDictionary, body);
                     }
                 }
-
-                return receivedTransportMessage;
             }
         }
 
-        async Task PerformExpiredMessagesCleanupCycle()
+        Task PerformExpiredMessagesCleanupCycle()
         {
             var results = 0;
             var stopwatch = Stopwatch.StartNew();
@@ -221,7 +207,7 @@ namespace Rebus.Oracle.Transport
                             ";
                         command.Parameters.Add(new OracleParameter("recipient", OracleDbType.VarChar, _inputQueueName, ParameterDirection.Input));
                         command.Parameters.Add(new OracleParameter("now", OracleDbType.TimeStampTZ, _rebusTime.Now.ToUniversalTime().DateTime, ParameterDirection.Input));
-                        affectedRows = await command.ExecuteNonQueryAsync();
+                        affectedRows = command.ExecuteNonQuery();
                     }
 
                     results += affectedRows;
@@ -237,6 +223,8 @@ namespace Rebus.Oracle.Transport
                     "Performed expired messages cleanup in {0} - {1} expired messages with recipient {2} were deleted",
                     stopwatch.Elapsed, results, _inputQueueName);
             }
+
+            return Task.CompletedTask;
         }
 
         /// <summary>
@@ -375,19 +363,18 @@ END;
             }
         }
 
-        Task<ConnectionWrapper> GetConnection(ITransactionContext context)
+        ConnectionWrapper GetConnection(ITransactionContext context)
         {
             return context
                 .GetOrAdd(CurrentConnectionKey,
-                    async () =>
+                    () =>
                     {
-                        await Task.CompletedTask;
                         var dbConnection = _connectionHelper.GetConnection();
                         var connectionWrapper = new ConnectionWrapper(dbConnection);
                         context.OnCommitted(() =>
                         {
                             dbConnection.Complete();
-                            return Task.FromResult(0);
+                            return Task.CompletedTask;
                         });
                         context.OnDisposed(() => connectionWrapper.Dispose());
                         return connectionWrapper;
