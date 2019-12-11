@@ -20,7 +20,7 @@ namespace Rebus.Oracle.Sagas
     /// </summary>
     public class OracleSqlSagaStorage : ISagaStorage
     {
-        static readonly string IdPropertyName = Reflect.Path<ISagaData>(d => d.Id);
+        const string IdPropertyName = nameof(ISagaData.Id);
 
         readonly ObjectSerializer _objectSerializer = new ObjectSerializer();
         readonly OracleConnectionHelper _connectionHelper;
@@ -43,7 +43,7 @@ namespace Rebus.Oracle.Sagas
 
         /// <summary>
         /// Checks to see if the configured saga data and saga index table exists. If they both exist, we'll continue, if
-        /// neigther of them exists, we'll try to create them. If one of them exists, we'll throw an error.
+        /// neither of them exists, we'll try to create them. If one of them exists, we'll throw an error.
         /// </summary>
         public void EnsureTablesAreCreated()
         {
@@ -115,7 +115,7 @@ namespace Rebus.Oracle.Sagas
         /// Finds an already-existing instance of the given saga data type that has a property with the given <paramref name="propertyName" />
         /// whose value matches <paramref name="propertyValue" />. Returns null if no such instance could be found
         /// </summary>
-        public async Task<ISagaData> Find(Type sagaDataType, string propertyName, object propertyValue)
+        public Task<ISagaData> Find(Type sagaDataType, string propertyName, object propertyValue)
         {
             using (var connection = _connectionHelper.GetConnection())
             {
@@ -144,9 +144,9 @@ namespace Rebus.Oracle.Sagas
                         command.Parameters.Add(new OracleParameter("value", OracleDbType.NVarChar, (propertyValue ?? "").ToString(), ParameterDirection.Input));
                     }
 
-                    var data = (byte[]) await command.ExecuteScalarAsync();
+                    var data = (byte[]) command.ExecuteScalar();
 
-                    if (data == null) return null;
+                    if (data == null) return Task.FromResult<ISagaData>(null);
 
                     try
                     {
@@ -154,10 +154,10 @@ namespace Rebus.Oracle.Sagas
 
                         if (!sagaDataType.IsInstanceOfType(sagaData))
                         {
-                            return null;
+                            return Task.FromResult<ISagaData>(null);
                         }
 
-                        return sagaData;
+                        return Task.FromResult(sagaData);
                     }
                     catch (Exception exception)
                     {
@@ -183,7 +183,7 @@ namespace Rebus.Oracle.Sagas
         /// Inserts the given saga data as a new instance. Throws a <see cref="T:Rebus.Exceptions.ConcurrencyException" /> if another saga data instance
         /// already exists with a correlation property that shares a value with this saga data.
         /// </summary>
-        public async Task Insert(ISagaData sagaData, IEnumerable<ISagaCorrelationProperty> correlationProperties)
+        public Task Insert(ISagaData sagaData, IEnumerable<ISagaCorrelationProperty> correlationProperties)
         {
             if (sagaData.Id == Guid.Empty)
             {
@@ -214,7 +214,7 @@ namespace Rebus.Oracle.Sagas
 
                     try
                     {
-                        await command.ExecuteNonQueryAsync();
+                        command.ExecuteNonQuery();
                     }
                     catch (OracleException exception)
                     {
@@ -227,10 +227,11 @@ namespace Rebus.Oracle.Sagas
 
                 if (propertiesToIndex.Any())
                 {
-                    await CreateIndex(sagaData, connection, propertiesToIndex);
+                    CreateIndex(sagaData, connection, propertiesToIndex);
                 }
 
                 connection.Complete();
+                return Task.CompletedTask;
             }
         }
 
@@ -239,7 +240,7 @@ namespace Rebus.Oracle.Sagas
         /// saga data instance exists with a correlation property that shares a value with this saga data, or if the saga data
         /// instance no longer exists.
         /// </summary>
-        public async Task Update(ISagaData sagaData, IEnumerable<ISagaCorrelationProperty> correlationProperties)
+        public Task Update(ISagaData sagaData, IEnumerable<ISagaCorrelationProperty> correlationProperties)
         {
             using (var connection = _connectionHelper.GetConnection())
             {
@@ -254,7 +255,7 @@ namespace Rebus.Oracle.Sagas
                 {
                     command.CommandText = $@"DELETE FROM {_indexTableName} WHERE saga_id = :id";
                     command.Parameters.Add("id", OracleDbType.Raw).Value = sagaData.Id;
-                    await command.ExecuteNonQueryAsync();
+                    command.ExecuteNonQuery();
                 }
 
                 // next, update or insert the saga
@@ -272,7 +273,7 @@ namespace Rebus.Oracle.Sagas
                             WHERE id = :id AND revision = :current_revision
                         ";
 
-                    var rows = await command.ExecuteNonQueryAsync();
+                    var rows = command.ExecuteNonQuery();
 
                     if (rows == 0)
                     {
@@ -285,61 +286,72 @@ namespace Rebus.Oracle.Sagas
 
                 if (propertiesToIndex.Any())
                 {
-                    await CreateIndex(sagaData, connection, propertiesToIndex);
+                    CreateIndex(sagaData, connection, propertiesToIndex);
                 }
 
                 connection.Complete();
+                return Task.CompletedTask;
             }
         }
 
         /// <summary>
         /// Deletes the saga data instance, throwing a <see cref="T:Rebus.Exceptions.ConcurrencyException" /> if the instance no longer exists
         /// </summary>
-        public async Task Delete(ISagaData sagaData)
+        public Task Delete(ISagaData sagaData)
         {
-            using (var connection = _connectionHelper.GetConnection())
+            try
             {
-                using (var command = connection.CreateCommand())
+                using (var connection = _connectionHelper.GetConnection())
                 {
-                    command.CommandText =
-                        $@"
-                        DELETE 
-                            FROM {_dataTableName} 
-                            WHERE id = :id AND revision = :current_revision
-                        ";
-
-                    command.Parameters.Add("id", OracleDbType.Raw).Value = sagaData.Id;
-                    command.Parameters.Add("current_revision", OracleDbType.Int64).Value = sagaData.Revision;
-
-                    var rows = await command.ExecuteNonQueryAsync();
-
-                    if (rows == 0)
+                    using (var command = connection.CreateCommand())
                     {
-                        throw new ConcurrencyException(
-                            $"Delete of saga with ID {sagaData.Id} did not succeed because someone else beat us to it");
+                        command.CommandText =
+                            $@"
+                            DELETE 
+                                FROM {_dataTableName} 
+                                WHERE id = :id AND revision = :current_revision
+                            ";
+
+                        command.Parameters.Add("id", OracleDbType.Raw).Value = sagaData.Id;
+                        command.Parameters.Add("current_revision", OracleDbType.Int64).Value = sagaData.Revision;
+
+                        var rows = command.ExecuteNonQuery();
+
+                        if (rows == 0)
+                        {
+                            throw new ConcurrencyException(
+                                $"Delete of saga with ID {sagaData.Id} did not succeed because someone else beat us to it");
+                        }
                     }
+
+                    using (var command = connection.CreateCommand())
+                    {
+                        command.CommandText =
+                            $@"
+                            DELETE 
+                                FROM {_indexTableName} 
+                                WHERE saga_id = :id
+                            ";
+                        command.Parameters.Add("id", OracleDbType.Raw).Value = sagaData.Id;
+
+                        command.ExecuteNonQuery();
+                    }
+
+                    connection.Complete();
                 }
 
-                using (var command = connection.CreateCommand())
-                {
-                    command.CommandText =
-                        $@"
-                        DELETE 
-                            FROM {_indexTableName} 
-                            WHERE saga_id = :id
-                        ";
-                    command.Parameters.Add("id", OracleDbType.Raw).Value = sagaData.Id;
+                sagaData.Revision++;
 
-                    await command.ExecuteNonQueryAsync();
-                }
-
-                connection.Complete();
+                return Task.CompletedTask;
             }
-
-            sagaData.Revision++;
+            catch (Exception ex)
+            {
+                // Wrap in AggregateException to comply with Rebus contract. Tests do look for this specific exception type.
+                throw new AggregateException(ex);
+            }
         }
 
-        async Task CreateIndex(ISagaData sagaData, OracleDbConnection connection,
+        void CreateIndex(ISagaData sagaData, OracleDbConnection connection,
             IEnumerable<KeyValuePair<string, string>> propertiesToIndex)
         {
             var sagaTypeName = GetSagaTypeName(sagaData.GetType());

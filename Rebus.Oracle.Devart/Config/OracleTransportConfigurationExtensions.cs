@@ -5,6 +5,7 @@ using Rebus.Oracle.Transport;
 using Rebus.Pipeline;
 using Rebus.Pipeline.Receive;
 using Rebus.Threading;
+using Rebus.Time;
 using Rebus.Timeouts;
 using Rebus.Transport;
 
@@ -43,8 +44,9 @@ namespace Rebus.Config
             {
                 var rebusLoggerFactory = context.Get<IRebusLoggerFactory>();
                 var asyncTaskFactory = context.Get<IAsyncTaskFactory>();
+                var rebusTime = context.Get<IRebusTime>();
                 var connectionProvider = connectionProviderFactory(rebusLoggerFactory);
-                var transport = new OracleTransport(connectionProvider, tableName, inputQueueName, rebusLoggerFactory, asyncTaskFactory);
+                var transport = new OracleTransport(connectionProvider, tableName, inputQueueName, rebusLoggerFactory, asyncTaskFactory, rebusTime);
                 transport.EnsureTableIsCreated();
                 return transport;
             });

@@ -1,11 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Data;
-using System.Globalization;
 using System.Linq;
 using System.Threading.Tasks;
 using Devart.Data.Oracle;
-using Rebus.Extensions;
+using Rebus.Exceptions;
 using Rebus.Logging;
 using Rebus.Subscriptions;
 
@@ -68,7 +67,7 @@ CREATE TABLE {_tableName} (
         /// <summary>
         /// Gets all destination addresses for the given topic
         /// </summary>
-        public async Task<string[]> GetSubscriberAddresses(string topic)
+        public Task<string[]> GetSubscriberAddresses(string topic)
         {
             using (var connection = _connectionHelper.GetConnection())
             using (var command = connection.CreateCommand())
@@ -79,7 +78,7 @@ CREATE TABLE {_tableName} (
 
                 var endpoints = new List<string>();
 
-                using (var reader = await command.ExecuteReaderAsync())
+                using (var reader = command.ExecuteReader())
                 {
                     while (reader.Read())
                     {
@@ -87,14 +86,14 @@ CREATE TABLE {_tableName} (
                     }
                 }
 
-                return endpoints.ToArray();
+                return Task.FromResult(endpoints.ToArray());
             }
         }
 
         /// <summary>
         /// Registers the given <paramref name="subscriberAddress" /> as a subscriber of the given topic
         /// </summary>
-        public async Task RegisterSubscriber(string topic, string subscriberAddress)
+        public Task RegisterSubscriber(string topic, string subscriberAddress)
         {
             using (var connection = _connectionHelper.GetConnection())
             using (var command = connection.CreateCommand())
@@ -107,7 +106,7 @@ CREATE TABLE {_tableName} (
 
                 try
                 {
-                    await command.ExecuteNonQueryAsync();
+                    command.ExecuteNonQuery();
                 }
                 catch (OracleException exception) when (exception.Code == UniqueKeyViolation)
                 {
@@ -115,13 +114,14 @@ CREATE TABLE {_tableName} (
                 }
 
                 connection.Complete();
+                return Task.CompletedTask;
             }
         }
 
         /// <summary>
         /// Unregisters the given <paramref name="subscriberAddress" /> as a subscriber of the given topic
         /// </summary>
-        public async Task UnregisterSubscriber(string topic, string subscriberAddress)
+        public Task UnregisterSubscriber(string topic, string subscriberAddress)
         {
             using (var connection = _connectionHelper.GetConnection())
             using (var command = connection.CreateCommand())
@@ -134,14 +134,15 @@ CREATE TABLE {_tableName} (
 
                 try
                 {
-                    await command.ExecuteNonQueryAsync();
+                    command.ExecuteNonQuery();
                 }
                 catch (OracleException exception)
                 {
-                    Console.WriteLine(exception);
+                    throw new RebusApplicationException(exception, "Failed to delete subscription from storage");
                 }
 
                 connection.Complete();
+                return Task.CompletedTask;
             }
         }
 

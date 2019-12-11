@@ -2,7 +2,6 @@
 using System.Collections.Generic;
 using System.Data;
 using System.Linq;
-using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using Devart.Data.Oracle;
 using Rebus.Logging;
@@ -26,22 +25,24 @@ namespace Rebus.Oracle.Timeouts
         readonly OracleConnectionHelper _connectionHelper;
         readonly string _tableName;
         readonly ILog _log;
+        readonly IRebusTime _rebusTime;
 
         /// <summary>
         /// Constructs the timeout manager
         /// </summary>
-        public OracleTimeoutManager(OracleConnectionHelper connectionHelper, string tableName, IRebusLoggerFactory rebusLoggerFactory)
+        public OracleTimeoutManager(OracleConnectionHelper connectionHelper, string tableName, IRebusLoggerFactory rebusLoggerFactory, IRebusTime rebusTime)
         {
             if (rebusLoggerFactory == null) throw new ArgumentNullException(nameof(rebusLoggerFactory));
             _connectionHelper = connectionHelper ?? throw new ArgumentNullException(nameof(connectionHelper));
             _tableName = tableName ?? throw new ArgumentNullException(nameof(tableName));
             _log = rebusLoggerFactory.GetLogger<OracleTimeoutManager>();
+            _rebusTime = rebusTime ?? throw new ArgumentNullException(nameof(rebusTime));
         }
 
         /// <summary>
         /// Stores the message with the given headers and body data, delaying it until the specified <paramref name="approximateDueTime" />
         /// </summary>
-        public async Task Defer(DateTimeOffset approximateDueTime, Dictionary<string, string> headers, byte[] body)
+        public Task Defer(DateTimeOffset approximateDueTime, Dictionary<string, string> headers, byte[] body)
         {
             using (var connection = _connectionHelper.GetConnection())
             {
@@ -52,17 +53,18 @@ namespace Rebus.Oracle.Timeouts
                     command.Parameters.Add(new OracleParameter("due_time", OracleDbType.TimeStampTZ, approximateDueTime.ToUniversalTime().DateTime, ParameterDirection.Input));
                     command.Parameters.Add(new OracleParameter("headers", OracleDbType.Clob, _dictionarySerializer.SerializeToString(headers), ParameterDirection.Input));
                     command.Parameters.Add(new OracleParameter("body", OracleDbType.Blob, body, ParameterDirection.Input));
-                    await command.ExecuteNonQueryAsync();
+                    command.ExecuteNonQuery();
                 }
 
                 connection.Complete();
+                return Task.CompletedTask;
             }
         }
 
         /// <summary>
         /// Gets due messages as of now, given the approximate due time that they were stored with when <see cref="M:Rebus.Timeouts.ITimeoutManager.Defer(System.DateTimeOffset,System.Collections.Generic.Dictionary{System.String,System.String},System.Byte[])" /> was called
         /// </summary>
-        public async Task<DueMessagesResult> GetDueMessages()
+        public Task<DueMessagesResult> GetDueMessages()
         {
             var connection = _connectionHelper.GetConnection();
 
@@ -83,9 +85,9 @@ namespace Rebus.Oracle.Timeouts
 
                         ORDER BY due_time
                         FOR UPDATE";
-                    command.Parameters.Add(new OracleParameter("current_time", OracleDbType.TimeStampTZ, RebusTime.Now.ToUniversalTime().DateTime, ParameterDirection.Input));
+                    command.Parameters.Add(new OracleParameter("current_time", OracleDbType.TimeStampTZ, _rebusTime.Now.ToUniversalTime().DateTime, ParameterDirection.Input));
 
-                    using (var reader = await command.ExecuteReaderAsync())
+                    using (var reader = command.ExecuteReader())
                     {
                         var dueMessages = new List<DueMessage>();
 
@@ -95,22 +97,24 @@ namespace Rebus.Oracle.Timeouts
                             var headers = _dictionarySerializer.DeserializeFromString((string) reader["headers"]);
                             var body = (byte[]) reader["body"];
 
-                            dueMessages.Add(new DueMessage(headers, body, async () =>
+                            dueMessages.Add(new DueMessage(headers, body, () =>
                             {
                                 using (var deleteCommand = connection.CreateCommand())
                                 {
                                     deleteCommand.CommandText = $@"DELETE FROM {_tableName} WHERE id = :id";
                                     deleteCommand.Parameters.Add(new OracleParameter("id", OracleDbType.Int64, id, ParameterDirection.Input));
-                                    await deleteCommand.ExecuteNonQueryAsync();
+                                    deleteCommand.ExecuteNonQuery();
+                                    return Task.CompletedTask;
                                 }
                             }));
                         }
 
-                        return new DueMessagesResult(dueMessages, async () =>
+                        return Task.FromResult(new DueMessagesResult(dueMessages, () =>
                         {
                             connection.Complete();
                             connection.Dispose();
-                        });
+                            return Task.CompletedTask;
+                        }));
                     }
                 }
             }
