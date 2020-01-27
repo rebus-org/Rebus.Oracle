@@ -21,9 +21,9 @@ namespace Rebus.Config
         /// store messages, and the "queue" specified by <paramref name="inputQueueName"/> will be used when querying for messages.
         /// The message table will automatically be created if it does not exist.
         /// </summary>
-        public static void UseOracle(this StandardConfigurer<ITransport> configurer, string connectionStringOrConnectionOrConnectionStringName, string tableName, string inputQueueName, bool enlistInAmbientTransaction = false, bool automaticallyCreateTables = true)
+        public static void UseOracle(this StandardConfigurer<ITransport> configurer, string connectionString, string tableName, string inputQueueName, bool enlistInAmbientTransaction = false, bool automaticallyCreateTables = true)
         {
-            Configure(configurer, loggerFactory => new OracleFactory(connectionStringOrConnectionOrConnectionStringName, null, enlistInAmbientTransaction), tableName, inputQueueName, automaticallyCreateTables);
+            Configure(configurer, loggerFactory => new OracleFactory(connectionString, null, enlistInAmbientTransaction), tableName, inputQueueName, automaticallyCreateTables);
         }
 
         /// <summary>
@@ -31,9 +31,9 @@ namespace Rebus.Config
         /// The table specified by <paramref name="tableName"/> will be used to store messages.
         /// The message table will automatically be created if it does not exist.
         /// </summary>
-        public static void UseOracleAsOneWayClient(this StandardConfigurer<ITransport> configurer, string connectionStringOrConnectionStringName, string tableName, bool enlistInAmbientTransaction = false, bool automaticallyCreateTables = true)
+        public static void UseOracleAsOneWayClient(this StandardConfigurer<ITransport> configurer, string connectionString, string tableName, bool enlistInAmbientTransaction = false, bool automaticallyCreateTables = true)
         {
-            Configure(configurer, loggerFactory => new OracleFactory(connectionStringOrConnectionStringName, null, enlistInAmbientTransaction), tableName, null, automaticallyCreateTables);
+            Configure(configurer, loggerFactory => new OracleFactory(connectionString, null, enlistInAmbientTransaction), tableName, null, automaticallyCreateTables);
 
             OneWayClientBackdoor.ConfigureOneWayClient(configurer);
         }
