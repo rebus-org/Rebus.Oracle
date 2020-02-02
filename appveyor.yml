@@ -6,15 +6,15 @@ cache:
   - packages -> **\packages.config
   - '%LocalAppData%\NuGet\Cache'
 
-services:
-  - postgresql95
+#services:
+#  - postgresql95
 
-before_build:
-  - SET PGUSER=postgres
-  - SET PGPASSWORD=Password12!
-  - PATH=C:\Program Files\PostgreSQL\9.5\bin\;%PATH%
-  - createdb rebus2_test
-  - appveyor-retry dotnet restore -v Minimal
+#before_build:
+#  - SET PGUSER=postgres
+#  - SET PGPASSWORD=Password12!
+#  - PATH=C:\Program Files\PostgreSQL\9.5\bin\;%PATH%
+#  - createdb rebus2_test
+#  - appveyor-retry dotnet restore -v Minimal
 
 build_script:
   - dotnet build Rebus.Oracle -c Release 
