@@ -29,9 +29,12 @@
   <ItemGroup>
     <ProjectReference Include="..\Rebus.Oracle\Rebus.Oracle.csproj" />
     <PackageReference Include="nunit" Version="3.12.0" />
-    <PackageReference Include="NUnit3TestAdapter" Version="3.14.0" />
-    <PackageReference Include="rebus" Version="6.0.0-b11" />
-    <PackageReference Include="rebus.tests.contracts" Version="6.0.0-b11" />
-    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="15.5.0" />
+    <PackageReference Include="NUnit3TestAdapter" Version="3.16.1">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="rebus" Version="6.3.1" />
+    <PackageReference Include="rebus.tests.contracts" Version="6.0.0" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="16.6.1" />
   </ItemGroup>
 </Project>

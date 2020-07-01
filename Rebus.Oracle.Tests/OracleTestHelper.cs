@@ -9,6 +9,7 @@ namespace Rebus.Oracle.Tests
         const int TableDoesNotExist = 942;
         const int SequenceDoesNotExist = 2289;
         const int ProcedureDoesNotExist = 4043;
+        
         static readonly OracleFactory OracleConnectionHelper = new OracleFactory(ConnectionString);
 
         public static string DatabaseName => $"rebus2_test_{TestConfig.Suffix}".TrimEnd('_');

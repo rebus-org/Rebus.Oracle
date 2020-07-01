@@ -17,9 +17,10 @@
 * Add databus storage - thanks [jods4]
 * Refactor connection management, reduce allocations, query string caching, + more - thanks [jods4]
 
-## 2.0.0-a7
+## 2.0.0
 * Port changes from Rebus.Oracle to Rebus.Oracle.Devart - thanks [Aerodynamite]
 * Rename misleading parameter
+* Update to Rebus 6
 
 ---
 

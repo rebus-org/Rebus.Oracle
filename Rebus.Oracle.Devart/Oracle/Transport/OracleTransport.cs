@@ -167,11 +167,12 @@ namespace Rebus.Oracle.Transport
                     selectCommand.CommandType = CommandType.StoredProcedure;
                     selectCommand.Parameters.Add(new OracleParameter("recipientQueue", OracleDbType.VarChar, _inputQueueName, ParameterDirection.Input));
                     selectCommand.Parameters.Add(new OracleParameter("now", OracleDbType.TimeStampTZ, _rebusTime.Now.ToUniversalTime().DateTime, ParameterDirection.Input));
-                    selectCommand.Parameters.Add(new OracleParameter("output", OracleDbType.Cursor ,ParameterDirection.Output));
+                    selectCommand.Parameters.Add(new OracleParameter("output", OracleDbType.Cursor, ParameterDirection.Output));
                     selectCommand.InitialLobFetchSize = -1;
                     selectCommand.ExecuteNonQuery();
 
-                    using (var reader = (selectCommand.Parameters["output"].Value as OracleCursor).GetDataReader()){
+                    using (var reader = (selectCommand.Parameters["output"].Value as OracleCursor).GetDataReader())
+                    {
                         if (!reader.Read())
                         {
                             return null;
@@ -372,12 +373,12 @@ END;
                     {
                         var dbConnection = _connectionHelper.GetConnection();
                         var connectionWrapper = new ConnectionWrapper(dbConnection);
-                        context.OnCommitted(() =>
+                        context.OnCommitted(ctx =>
                         {
                             dbConnection.Complete();
                             return Task.CompletedTask;
                         });
-                        context.OnDisposed(() => connectionWrapper.Dispose());
+                        context.OnDisposed(ctx => connectionWrapper.Dispose());
                         return connectionWrapper;
                     });
         }

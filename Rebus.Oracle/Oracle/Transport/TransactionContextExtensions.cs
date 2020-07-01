@@ -14,23 +14,23 @@ namespace Rebus.Oracle.Transport
             return context.GetOrAdd(ConnectionKey, () =>
             {
                 var connection = factory.Open();
-                context.OnCommitted(() =>
+                context.OnCommitted(ctx =>
                 {
                     connection.Complete();
                     return Task.CompletedTask;
                 });
-                context.OnDisposed(connection.Dispose);
+                context.OnDisposed(ctx => connection.Dispose());
                 return connection;
             });
         }
 
         public static OracleCommand GetSendCommand(this ITransactionContext context, OracleFactory factory, string sql)
         {
-            return context.GetOrAdd(SendCommandKey, () => 
+            return context.GetOrAdd(SendCommandKey, () =>
             {
                 var connection = context.GetConnection(factory);
                 var command = SendCommand.Create(connection, sql);
-                context.OnDisposed(command.Dispose);
+                context.OnDisposed(ctx => command.Dispose());
                 return command;
             });
         }
