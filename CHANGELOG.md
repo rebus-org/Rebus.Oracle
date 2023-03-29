@@ -22,6 +22,9 @@
 * Rename misleading parameter
 * Update to Rebus 6
 
+## 3.0.0-alpha01
+* Update to Rebus 8
+
 ---
 
 [Aerodynamite]: https://github.com/Aerodynamite

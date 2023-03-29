@@ -4,82 +4,81 @@ using Devart.Data.Oracle;
 // ReSharper disable EmptyGeneralCatchClause
 #pragma warning disable 1998
 
-namespace Rebus.Oracle
+namespace Rebus.Oracle;
+
+/// <summary>
+/// Wraps an opened <see cref="OracleConnection"/> and makes it easier to work with it
+/// </summary>
+public class OracleDbConnection : IDisposable
 {
+    readonly OracleConnection _currentConnection;
+    OracleTransaction _currentTransaction;
+
+    bool _disposed;
+
     /// <summary>
-    /// Wraps an opened <see cref="OracleConnection"/> and makes it easier to work with it
+    /// Constructs the wrapper with the given connection and transaction
     /// </summary>
-    public class OracleDbConnection : IDisposable
+    public OracleDbConnection(OracleConnection currentConnection, OracleTransaction currentTransaction)
     {
-        readonly OracleConnection _currentConnection;
-        OracleTransaction _currentTransaction;
+        _currentConnection = currentConnection ?? throw new ArgumentNullException(nameof(currentConnection));
+        _currentTransaction = currentTransaction;
+    }
 
-        bool _disposed;
+    /// <summary>
+    /// Creates a new command, enlisting it in the current transaction
+    /// </summary>
+    public OracleCommand CreateCommand()
+    {
+        var command = _currentConnection.CreateCommand();
+        command.Transaction = _currentTransaction;
+        return command;
+    }
 
-        /// <summary>
-        /// Constructs the wrapper with the given connection and transaction
-        /// </summary>
-        public OracleDbConnection(OracleConnection currentConnection, OracleTransaction currentTransaction)
+    /// <summary>
+    /// Completes the transaction
+    /// </summary>
+
+    public void Complete()
+    {
+        if (_currentTransaction == null) return;
+        using (_currentTransaction)
         {
-            _currentConnection = currentConnection ?? throw new ArgumentNullException(nameof(currentConnection));
-            _currentTransaction = currentTransaction;
+            _currentTransaction.Commit();
+            _currentTransaction = null;
         }
+    }
 
-        /// <summary>
-        /// Creates a new command, enlisting it in the current transaction
-        /// </summary>
-        public OracleCommand CreateCommand()
+    /// <summary>
+    /// Rolls back the transaction if it hasn't been completed
+    /// </summary>
+    public void Dispose()
+    {
+        if (_disposed) return;
+
+        try
         {
-            var command = _currentConnection.CreateCommand();
-            command.Transaction = _currentTransaction;
-            return command;
-        }
-
-        /// <summary>
-        /// Completes the transaction
-        /// </summary>
-
-        public void Complete()
-        {
-            if (_currentTransaction == null) return;
-            using (_currentTransaction)
-            {
-                _currentTransaction.Commit();
-                _currentTransaction = null;
-            }
-        }
-
-        /// <summary>
-        /// Rolls back the transaction if it hasn't been completed
-        /// </summary>
-        public void Dispose()
-        {
-            if (_disposed) return;
-
             try
             {
-                try
+                if (_currentTransaction == null) return;
+                using (_currentTransaction)
                 {
-                    if (_currentTransaction == null) return;
-                    using (_currentTransaction)
+                    try
                     {
-                        try
-                        {
-                            _currentTransaction.Rollback();
-                        }
-                        catch { }
-                        _currentTransaction = null;
+                        _currentTransaction.Rollback();
                     }
-                }
-                finally
-                {
-                    _currentConnection.Dispose();
+                    catch { }
+                    _currentTransaction = null;
                 }
             }
             finally
             {
-                _disposed = true;
+                _currentConnection.Dispose();
             }
+        }
+        finally
+        {
+            _disposed = true;
         }
     }
 }

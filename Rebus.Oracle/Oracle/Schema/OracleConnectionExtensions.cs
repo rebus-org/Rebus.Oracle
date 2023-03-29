@@ -1,85 +1,84 @@
 using System;
 using Oracle.ManagedDataAccess.Client;
 
-namespace Rebus.Oracle.Schema
+namespace Rebus.Oracle.Schema;
+
+/// <summary>Methods to create the required DB objects supporting Rebus.Oracle.</summary>
+/// <remarks>These methods are automatically called by Rebus unless you pass automaticallyCreateTables = false during configuration.</remarks>
+public static class OracleConnectionExtensions
 {
-    /// <summary>Methods to create the required DB objects supporting Rebus.Oracle.</summary>
-    /// <remarks>These methods are automatically called by Rebus unless you pass automaticallyCreateTables = false during configuration.</remarks>
-    public static class OracleConnectionExtensions
+    /// <summary>Create objects supporting Transport.</summary>
+    public static bool CreateRebusTransport(this OracleConnection connection, DbName tableName) 
+        => connection.CreateIfNotExists(tableName, DDL.transport);
+
+    /// <summary>Create objects supporting Timeouts.</summary>
+    public static bool CreateRebusTimeout(this OracleConnection connection, DbName tableName)
+        => connection.CreateIfNotExists(tableName, DDL.timeout);
+
+    /// <summary>Create objects supporting Subscriptions.</summary>
+    public static bool CreateRebusSubscription(this OracleConnection connection, DbName tableName)
+        => connection.CreateIfNotExists(tableName, DDL.subscription);
+
+    /// <summary>Create objects supporting Sagas.</summary>
+    public static bool CreateRebusSaga(this OracleConnection connection, DbName dataTableName, DbName indexTableName)
     {
-        /// <summary>Create objects supporting Transport.</summary>
-        public static bool CreateRebusTransport(this OracleConnection connection, DbName tableName) 
-            => connection.CreateIfNotExists(tableName, DDL.transport);
+        return connection.CreateIfNotExists(dataTableName, DDL.sagaData) |
+               connection.CreateIfNotExists(indexTableName, DDL.sagaIndex);
+    }
 
-        /// <summary>Create objects supporting Timeouts.</summary>
-        public static bool CreateRebusTimeout(this OracleConnection connection, DbName tableName)
-            => connection.CreateIfNotExists(tableName, DDL.timeout);
+    /// <summary>Create objects supporting Sagas Snapshots.</summary>
+    public static bool CreateRebusSagaSnapshot(this OracleConnection connection, DbName tableName)
+        => connection.CreateIfNotExists(tableName, DDL.sagaSnapshot);
 
-        /// <summary>Create objects supporting Subscriptions.</summary>
-        public static bool CreateRebusSubscription(this OracleConnection connection, DbName tableName)
-            => connection.CreateIfNotExists(tableName, DDL.subscription);
+    /// <summary>Create objects supporting DataBus.</summary>
+    public static bool CreateRebusDataBus(this OracleConnection connection, DbName tableName)
+        => connection.CreateIfNotExists(tableName, DDL.dataBus);
 
-        /// <summary>Create objects supporting Sagas.</summary>
-        public static bool CreateRebusSaga(this OracleConnection connection, DbName dataTableName, DbName indexTableName)
+    private static bool Exists(this OracleConnection connection, DbName objectName)
+    {
+        using (var command = connection.CreateCommand())
         {
-            return connection.CreateIfNotExists(dataTableName, DDL.sagaData) |
-                   connection.CreateIfNotExists(indexTableName, DDL.sagaIndex);
+            if (objectName.Owner == null)
+            {
+                command.CommandText = "select 1 from user_objects where object_name = upper(:name)";
+                command.Parameters.Add("name", objectName.Name);
+            }
+            else
+            {
+                command.CommandText = "select 1 from all_objects where owner = upper(:owner) and object_name = upper(:name)";
+                command.Parameters.Add("owner", objectName.Owner);
+                command.Parameters.Add("name", objectName.Name);
+            }
+
+            return command.ExecuteScalar() != null;
         }
+    }
 
-        /// <summary>Create objects supporting Sagas Snapshots.</summary>
-        public static bool CreateRebusSagaSnapshot(this OracleConnection connection, DbName tableName)
-            => connection.CreateIfNotExists(tableName, DDL.sagaSnapshot);
+    private static bool CreateIfNotExists(this OracleConnection connection, DbName tableName, Func<DbName, string[]> ddl)
+    {
+        if (connection == null) throw new ArgumentNullException(nameof(connection));
 
-        /// <summary>Create objects supporting DataBus.</summary>
-        public static bool CreateRebusDataBus(this OracleConnection connection, DbName tableName)
-            => connection.CreateIfNotExists(tableName, DDL.dataBus);
+        if (connection.Exists(tableName)) return false;
 
-        private static bool Exists(this OracleConnection connection, DbName objectName)
+        try
         {
             using (var command = connection.CreateCommand())
             {
-                if (objectName.Owner == null)
+                foreach (var sql in ddl(tableName))
                 {
-                    command.CommandText = "select 1 from user_objects where object_name = upper(:name)";
-                    command.Parameters.Add("name", objectName.Name);
+                    command.CommandText = sql;
+                    command.ExecuteNonQuery();
                 }
-                else
-                {
-                    command.CommandText = "select 1 from all_objects where owner = upper(:owner) and object_name = upper(:name)";
-                    command.Parameters.Add("owner", objectName.Owner);
-                    command.Parameters.Add("name", objectName.Name);
-                }
-
-                return command.ExecuteScalar() != null;
             }
         }
-
-        private static bool CreateIfNotExists(this OracleConnection connection, DbName tableName, Func<DbName, string[]> ddl)
+        catch 
         {
-            if (connection == null) throw new ArgumentNullException(nameof(connection));
-
+            // We might fail if another process created the same objects concurrently
             if (connection.Exists(tableName)) return false;
-
-            try
-            {
-                using (var command = connection.CreateCommand())
-                {
-                    foreach (var sql in ddl(tableName))
-                    {
-                        command.CommandText = sql;
-                        command.ExecuteNonQuery();
-                    }
-                }
-            }
-            catch 
-            {
-                // We might fail if another process created the same objects concurrently
-                if (connection.Exists(tableName)) return false;
-                // Otherwise propagate the error
-                throw;
-            }
-            
-            return true;
+            // Otherwise propagate the error
+            throw;
         }
+            
+        return true;
     }
 }

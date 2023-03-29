@@ -20,13 +20,13 @@ if %ERRORLEVEL% neq 0 (
  	goto exit_fail
 )
 
-dotnet build "%root%\Rebus.Oracle" -c Release
+dotnet build "%root%\Rebus.Oracle" -c Release --no-restore
 if %ERRORLEVEL% neq 0 (
 	popd
  	goto exit_fail
 )
 
-dotnet build "%root%\Rebus.Oracle.Devart" -c Release
+dotnet build "%root%\Rebus.Oracle.Devart" -c Release --no-restore
 if %ERRORLEVEL% neq 0 (
 	popd
  	goto exit_fail

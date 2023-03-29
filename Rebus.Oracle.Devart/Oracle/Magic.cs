@@ -1,27 +1,26 @@
 ﻿using System.Collections.Generic;
 
-namespace Rebus.Oracle
+namespace Rebus.Oracle;
+
+static class OracleMagic
 {
-    static class OracleMagic
+    public static List<string> GetTableNames(this OracleDbConnection connection)
     {
-        public static List<string> GetTableNames(this OracleDbConnection connection)
+        var tableNames = new List<string>();
+
+        using (var command = connection.CreateCommand())
         {
-            var tableNames = new List<string>();
+            command.CommandText = "select table_name from USER_TABLES";
 
-            using (var command = connection.CreateCommand())
+            using (var reader = command.ExecuteReader())
             {
-                command.CommandText = "select table_name from USER_TABLES";
-
-                using (var reader = command.ExecuteReader())
+                while (reader.Read())
                 {
-                    while (reader.Read())
-                    {
-                        tableNames.Add(reader["table_name"].ToString());
-                    }
+                    tableNames.Add(reader["table_name"].ToString());
                 }
             }
-
-            return tableNames;
         }
+
+        return tableNames;
     }
 }

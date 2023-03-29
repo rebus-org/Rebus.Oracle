@@ -16,104 +16,116 @@ using Rebus.Threading;
 using Rebus.Time;
 using Rebus.Transport;
 
-namespace Rebus.Oracle.Transport
+namespace Rebus.Oracle.Transport;
+
+/// <summary>
+/// Implementation of <see cref="ITransport"/> that uses Oracle to move messages around
+/// </summary>
+public class OracleTransport : ITransport, IInitializable, IDisposable
 {
+    const string CurrentConnectionKey = "oracle-transport-current-connection";
+
+    static readonly HeaderSerializer HeaderSerializer = new HeaderSerializer();
+
+    readonly OracleConnectionHelper _connectionHelper;
+    readonly string _tableName;
+    readonly string _inputQueueName;
+    readonly AsyncBottleneck _receiveBottleneck = new AsyncBottleneck(20);
+    readonly IAsyncTask _expiredMessagesCleanupTask;
+    readonly ILog _log;
+    readonly IRebusTime _rebusTime;
+
+    bool _disposed;
+
     /// <summary>
-    /// Implementation of <see cref="ITransport"/> that uses Oracle to move messages around
+    /// Header key of message priority which happens to be supported by this transport
     /// </summary>
-    public class OracleTransport : ITransport, IInitializable, IDisposable
+    public const string MessagePriorityHeaderKey = "rbs2-msg-priority";
+
+    /// <summary>
+    /// Indicates the default interval between which expired messages will be cleaned up
+    /// </summary>
+    public static readonly TimeSpan DefaultExpiredMessagesCleanupInterval = TimeSpan.FromSeconds(20);
+
+    const int OperationCancelledNumber = 3980;
+
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="connectionHelper"></param>
+    /// <param name="tableName"></param>
+    /// <param name="inputQueueName"></param>
+    /// <param name="rebusLoggerFactory"></param>
+    /// <param name="asyncTaskFactory"></param>
+    /// <param name="rebusTime"></param>
+    public OracleTransport(OracleConnectionHelper connectionHelper, string tableName, string inputQueueName, IRebusLoggerFactory rebusLoggerFactory, IAsyncTaskFactory asyncTaskFactory, IRebusTime rebusTime)
     {
-        const string CurrentConnectionKey = "oracle-transport-current-connection";
+        if (rebusLoggerFactory == null) throw new ArgumentNullException(nameof(rebusLoggerFactory));
+        if (asyncTaskFactory == null) throw new ArgumentNullException(nameof(asyncTaskFactory));
 
-        static readonly HeaderSerializer HeaderSerializer = new HeaderSerializer();
+        _log = rebusLoggerFactory.GetLogger<OracleTransport>();
+        _rebusTime = rebusTime ?? throw new ArgumentNullException(nameof(rebusTime));
+        _connectionHelper = connectionHelper ?? throw new ArgumentNullException(nameof(connectionHelper));
+        _tableName = tableName ?? throw new ArgumentNullException(nameof(tableName));
+        _inputQueueName = inputQueueName;
+        _expiredMessagesCleanupTask = asyncTaskFactory.Create("ExpiredMessagesCleanup", PerformExpiredMessagesCleanupCycle, intervalSeconds: 60);
 
-        readonly OracleConnectionHelper _connectionHelper;
-        readonly string _tableName;
-        readonly string _inputQueueName;
-        readonly AsyncBottleneck _receiveBottleneck = new AsyncBottleneck(20);
-        readonly IAsyncTask _expiredMessagesCleanupTask;
-        readonly ILog _log;
-        readonly IRebusTime _rebusTime;
+        ExpiredMessagesCleanupInterval = DefaultExpiredMessagesCleanupInterval;
+    }
 
-        bool _disposed;
+    /// <inheritdoc />
+    public void Initialize()
+    {
+        if (_inputQueueName == null) return;
+        _expiredMessagesCleanupTask.Start();
+    }
 
-        /// <summary>
-        /// Header key of message priority which happens to be supported by this transport
-        /// </summary>
-        public const string MessagePriorityHeaderKey = "rbs2-msg-priority";
+    /// <summary>
+    /// 
+    /// </summary>
+    public TimeSpan ExpiredMessagesCleanupInterval { get; set; }
 
-        /// <summary>
-        /// Indicates the default interval between which expired messages will be cleaned up
-        /// </summary>
-        public static readonly TimeSpan DefaultExpiredMessagesCleanupInterval = TimeSpan.FromSeconds(20);
+    /// <summary>The SQL transport doesn't really have queues, so this function does nothing</summary>
+    public void CreateQueue(string address)
+    {
+    }
 
-        const int OperationCancelledNumber = 3980;
-
-        /// <summary>
-        /// 
-        /// </summary>
-        /// <param name="connectionHelper"></param>
-        /// <param name="tableName"></param>
-        /// <param name="inputQueueName"></param>
-        /// <param name="rebusLoggerFactory"></param>
-        /// <param name="asyncTaskFactory"></param>
-        /// <param name="rebusTime"></param>
-        public OracleTransport(OracleConnectionHelper connectionHelper, string tableName, string inputQueueName, IRebusLoggerFactory rebusLoggerFactory, IAsyncTaskFactory asyncTaskFactory, IRebusTime rebusTime)
+    /// <inheritdoc />
+    public async Task Send(string destinationAddress, TransportMessage message, ITransactionContext context)
+    {
+        var connection = context.GetOrAdd(CurrentConnectionKey, () =>
         {
-            if (rebusLoggerFactory == null) throw new ArgumentNullException(nameof(rebusLoggerFactory));
-            if (asyncTaskFactory == null) throw new ArgumentNullException(nameof(asyncTaskFactory));
-
-            _log = rebusLoggerFactory.GetLogger<OracleTransport>();
-            _rebusTime = rebusTime ?? throw new ArgumentNullException(nameof(rebusTime));
-            _connectionHelper = connectionHelper ?? throw new ArgumentNullException(nameof(connectionHelper));
-            _tableName = tableName ?? throw new ArgumentNullException(nameof(tableName));
-            _inputQueueName = inputQueueName;
-            _expiredMessagesCleanupTask = asyncTaskFactory.Create("ExpiredMessagesCleanup", PerformExpiredMessagesCleanupCycle, intervalSeconds: 60);
-
-            ExpiredMessagesCleanupInterval = DefaultExpiredMessagesCleanupInterval;
-        }
-
-        /// <inheritdoc />
-        public void Initialize()
-        {
-            if (_inputQueueName == null) return;
-            _expiredMessagesCleanupTask.Start();
-        }
-
-        /// <summary>
-        /// 
-        /// </summary>
-        public TimeSpan ExpiredMessagesCleanupInterval { get; set; }
-
-        /// <summary>The SQL transport doesn't really have queues, so this function does nothing</summary>
-        public void CreateQueue(string address)
-        {
-        }
-
-        /// <inheritdoc />
-        public async Task Send(string destinationAddress, TransportMessage message, ITransactionContext context)
-        {
-            var connection = GetConnection(context);
-            var semaphore = connection.Semaphore;
-
-            // serialize access to the connection
-            await semaphore.WaitAsync();
-
-            try
+            var dbConnection = _connectionHelper.GetConnection();
+            var connectionWrapper = new ConnectionWrapper(dbConnection);
+            context.OnCommit(_ =>
             {
-                InnerSend(destinationAddress, message, connection);
-            }
-            finally
-            {
-                semaphore.Release();
-            }
-        }
+                dbConnection.Complete();
+                return Task.CompletedTask;
+            });
+            context.OnDisposed(_ => connectionWrapper.Dispose());
+            return connectionWrapper;
+        });
 
-        void InnerSend(string destinationAddress, TransportMessage message, ConnectionWrapper connection)
+        var semaphore = connection.Semaphore;
+
+        // serialize access to the connection
+        await semaphore.WaitAsync();
+
+        try
         {
-            using (var command = connection.Connection.CreateCommand())
-            {
-                command.CommandText = $@"
+            InnerSend(destinationAddress, message, connection);
+        }
+        finally
+        {
+            semaphore.Release();
+        }
+    }
+
+    void InnerSend(string destinationAddress, TransportMessage message, ConnectionWrapper connection)
+    {
+        using (var command = connection.Connection.CreateCommand())
+        {
+            command.CommandText = $@"
                     INSERT INTO {_tableName}
                     (
                         recipient,
@@ -133,137 +145,148 @@ namespace Rebus.Oracle.Transport
                         :now + :ttlseconds
                     )";
 
-                var headers = message.Headers.Clone();
+            var headers = message.Headers.Clone();
 
-                var priority = GetMessagePriority(headers);
-                var initialVisibilityDelay = new TimeSpan(0, 0, 0, GetInitialVisibilityDelay(headers, _rebusTime.Now));
-                var ttlSeconds = new TimeSpan(0, 0, 0, GetTtlSeconds(headers));
+            var priority = GetMessagePriority(headers);
+            var initialVisibilityDelay = new TimeSpan(0, 0, 0, GetInitialVisibilityDelay(headers, _rebusTime.Now));
+            var ttlSeconds = new TimeSpan(0, 0, 0, GetTtlSeconds(headers));
 
-                // must be last because the other functions on the headers might change them
-                var serializedHeaders = HeaderSerializer.Serialize(headers);
+            // must be last because the other functions on the headers might change them
+            var serializedHeaders = HeaderSerializer.Serialize(headers);
 
-                command.Parameters.Add(new OracleParameter("recipient", OracleDbType.VarChar, destinationAddress, ParameterDirection.Input));
-                command.Parameters.Add(new OracleParameter("headers", OracleDbType.Blob, serializedHeaders, ParameterDirection.Input));
-                command.Parameters.Add(new OracleParameter("body", OracleDbType.Blob, message.Body, ParameterDirection.Input));
-                command.Parameters.Add(new OracleParameter("priority", OracleDbType.Int64, priority, ParameterDirection.Input));
-                command.Parameters.Add(new OracleParameter("now", OracleDbType.TimeStampTZ, _rebusTime.Now.ToUniversalTime().DateTime, ParameterDirection.Input));
-                command.Parameters.Add(new OracleParameter("visible", OracleDbType.IntervalDS, initialVisibilityDelay, ParameterDirection.Input));
-                command.Parameters.Add(new OracleParameter("ttlseconds", OracleDbType.IntervalDS, ttlSeconds, ParameterDirection.Input));
+            command.Parameters.Add(new OracleParameter("recipient", OracleDbType.VarChar, destinationAddress, ParameterDirection.Input));
+            command.Parameters.Add(new OracleParameter("headers", OracleDbType.Blob, serializedHeaders, ParameterDirection.Input));
+            command.Parameters.Add(new OracleParameter("body", OracleDbType.Blob, message.Body, ParameterDirection.Input));
+            command.Parameters.Add(new OracleParameter("priority", OracleDbType.Int64, priority, ParameterDirection.Input));
+            command.Parameters.Add(new OracleParameter("now", OracleDbType.TimeStampTZ, _rebusTime.Now.ToUniversalTime().DateTime, ParameterDirection.Input));
+            command.Parameters.Add(new OracleParameter("visible", OracleDbType.IntervalDS, initialVisibilityDelay, ParameterDirection.Input));
+            command.Parameters.Add(new OracleParameter("ttlseconds", OracleDbType.IntervalDS, ttlSeconds, ParameterDirection.Input));
 
-                command.ExecuteNonQuery();
-            }
+            command.ExecuteNonQuery();
         }
+    }
 
-        /// <inheritdoc />
-        public async Task<TransportMessage> Receive(ITransactionContext context, CancellationToken cancellationToken)
+    /// <inheritdoc />
+    public async Task<TransportMessage> Receive(ITransactionContext context, CancellationToken cancellationToken)
+    {
+        using (await _receiveBottleneck.Enter(cancellationToken))
         {
-            using (await _receiveBottleneck.Enter(cancellationToken))
+            var connection = context.GetOrAdd(CurrentConnectionKey, () =>
             {
-                var connection = GetConnection(context);
-
-                using (var selectCommand = connection.Connection.CreateCommand())
+                var dbConnection = _connectionHelper.GetConnection();
+                var connectionWrapper = new ConnectionWrapper(dbConnection);
+                context.OnAck(_ =>
                 {
-                    selectCommand.CommandText = $"rebus_dequeue_{_tableName}";
-                    selectCommand.CommandType = CommandType.StoredProcedure;
-                    selectCommand.Parameters.Add(new OracleParameter("recipientQueue", OracleDbType.VarChar, _inputQueueName, ParameterDirection.Input));
-                    selectCommand.Parameters.Add(new OracleParameter("now", OracleDbType.TimeStampTZ, _rebusTime.Now.ToUniversalTime().DateTime, ParameterDirection.Input));
-                    selectCommand.Parameters.Add(new OracleParameter("output", OracleDbType.Cursor, ParameterDirection.Output));
-                    selectCommand.InitialLobFetchSize = -1;
-                    selectCommand.ExecuteNonQuery();
+                    dbConnection.Complete();
+                    return Task.CompletedTask;
+                });
+                context.OnDisposed(_ => connectionWrapper.Dispose());
+                return connectionWrapper;
+            });
 
-                    using (var reader = (selectCommand.Parameters["output"].Value as OracleCursor).GetDataReader())
+            using (var selectCommand = connection.Connection.CreateCommand())
+            {
+                selectCommand.CommandText = $"rebus_dequeue_{_tableName}";
+                selectCommand.CommandType = CommandType.StoredProcedure;
+                selectCommand.Parameters.Add(new OracleParameter("recipientQueue", OracleDbType.VarChar, _inputQueueName, ParameterDirection.Input));
+                selectCommand.Parameters.Add(new OracleParameter("now", OracleDbType.TimeStampTZ, _rebusTime.Now.ToUniversalTime().DateTime, ParameterDirection.Input));
+                selectCommand.Parameters.Add(new OracleParameter("output", OracleDbType.Cursor, ParameterDirection.Output));
+                selectCommand.InitialLobFetchSize = -1;
+                selectCommand.ExecuteNonQuery();
+
+                using (var reader = (selectCommand.Parameters["output"].Value as OracleCursor).GetDataReader())
+                {
+                    if (!reader.Read())
                     {
-                        if (!reader.Read())
-                        {
-                            return null;
-                        }
-
-                        var headers = (byte[])reader["headers"];
-                        var body = (byte[])reader["body"];
-                        var headersDictionary = HeaderSerializer.Deserialize(headers);
-
-                        return new TransportMessage(headersDictionary, body);
+                        return null;
                     }
+
+                    var headers = (byte[])reader["headers"];
+                    var body = (byte[])reader["body"];
+                    var headersDictionary = HeaderSerializer.Deserialize(headers);
+
+                    return new TransportMessage(headersDictionary, body);
                 }
             }
         }
+    }
 
-        Task PerformExpiredMessagesCleanupCycle()
+    Task PerformExpiredMessagesCleanupCycle()
+    {
+        var results = 0;
+        var stopwatch = Stopwatch.StartNew();
+
+        while (true)
         {
-            var results = 0;
-            var stopwatch = Stopwatch.StartNew();
-
-            while (true)
+            using (var connection = _connectionHelper.GetConnection())
             {
-                using (var connection = _connectionHelper.GetConnection())
-                {
-                    int affectedRows;
+                int affectedRows;
 
-                    using (var command = connection.CreateCommand())
-                    {
-                        command.CommandText =
-                            $@"
+                using (var command = connection.CreateCommand())
+                {
+                    command.CommandText =
+                        $@"
                             delete from {_tableName} 
                             where recipient = :recipient 
                             and expiration < :now
                             ";
-                        command.Parameters.Add(new OracleParameter("recipient", OracleDbType.VarChar, _inputQueueName, ParameterDirection.Input));
-                        command.Parameters.Add(new OracleParameter("now", OracleDbType.TimeStampTZ, _rebusTime.Now.ToUniversalTime().DateTime, ParameterDirection.Input));
-                        affectedRows = command.ExecuteNonQuery();
-                    }
-
-                    results += affectedRows;
-                    connection.Complete();
-
-                    if (affectedRows == 0) break;
+                    command.Parameters.Add(new OracleParameter("recipient", OracleDbType.VarChar, _inputQueueName, ParameterDirection.Input));
+                    command.Parameters.Add(new OracleParameter("now", OracleDbType.TimeStampTZ, _rebusTime.Now.ToUniversalTime().DateTime, ParameterDirection.Input));
+                    affectedRows = command.ExecuteNonQuery();
                 }
-            }
 
-            if (results > 0)
-            {
-                _log.Info(
-                    "Performed expired messages cleanup in {0} - {1} expired messages with recipient {2} were deleted",
-                    stopwatch.Elapsed, results, _inputQueueName);
-            }
+                results += affectedRows;
+                connection.Complete();
 
-            return Task.CompletedTask;
-        }
-
-        /// <summary>
-        /// Gets the address of the transport
-        /// </summary>
-        public string Address => _inputQueueName;
-
-        /// <summary>
-        /// Creates the necessary table
-        /// </summary>
-        public void EnsureTableIsCreated()
-        {
-            try
-            {
-                CreateSchema();
-            }
-            catch (Exception exception)
-            {
-                throw new RebusApplicationException(exception, $"Error attempting to initialize SQL transport schema with mesages table [dbo].[{_tableName}]");
+                if (affectedRows == 0) break;
             }
         }
 
-        void CreateSchema()
+        if (results > 0)
         {
-            using (var connection = _connectionHelper.GetConnection())
+            _log.Info(
+                "Performed expired messages cleanup in {0} - {1} expired messages with recipient {2} were deleted",
+                stopwatch.Elapsed, results, _inputQueueName);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Gets the address of the transport
+    /// </summary>
+    public string Address => _inputQueueName;
+
+    /// <summary>
+    /// Creates the necessary table
+    /// </summary>
+    public void EnsureTableIsCreated()
+    {
+        try
+        {
+            CreateSchema();
+        }
+        catch (Exception exception)
+        {
+            throw new RebusApplicationException(exception, $"Error attempting to initialize SQL transport schema with mesages table [dbo].[{_tableName}]");
+        }
+    }
+
+    void CreateSchema()
+    {
+        using (var connection = _connectionHelper.GetConnection())
+        {
+            var tableNames = connection.GetTableNames();
+
+            if (tableNames.Contains(_tableName, StringComparer.OrdinalIgnoreCase))
             {
-                var tableNames = connection.GetTableNames();
+                _log.Info("Database already contains a table named {tableName} - will not create anything", _tableName);
+                return;
+            }
 
-                if (tableNames.Contains(_tableName, StringComparer.OrdinalIgnoreCase))
-                {
-                    _log.Info("Database already contains a table named {tableName} - will not create anything", _tableName);
-                    return;
-                }
+            _log.Info("Table {tableName} does not exist - it will be created now", _tableName);
 
-                _log.Info("Table {tableName} does not exist - it will be created now", _tableName);
-
-                ExecuteCommands(connection, $@"
+            ExecuteCommands(connection, $@"
 CREATE TABLE {_tableName}
 (
     id NUMBER(20) NOT NULL,
@@ -316,129 +339,109 @@ begin
 END;
 ");
 
-                connection.Complete();
+            connection.Complete();
+        }
+    }
+
+    static void ExecuteCommands(OracleDbConnection connection, string sqlCommands)
+    {
+        foreach (var sqlCommand in sqlCommands.Split(new[] { "----" }, StringSplitOptions.RemoveEmptyEntries))
+        {
+            using (var command = connection.CreateCommand())
+            {
+                command.CommandText = sqlCommand;
+
+                Execute(command);
             }
         }
+    }
 
-        static void ExecuteCommands(OracleDbConnection connection, string sqlCommands)
+    static void Execute(IDbCommand command)
+    {
+        try
         {
-            foreach (var sqlCommand in sqlCommands.Split(new[] { "----" }, StringSplitOptions.RemoveEmptyEntries))
-            {
-                using (var command = connection.CreateCommand())
-                {
-                    command.CommandText = sqlCommand;
-
-                    Execute(command);
-                }
-            }
+            command.ExecuteNonQuery();
         }
-
-        static void Execute(IDbCommand command)
+        catch (OracleException exception)
         {
-            try
-            {
-                command.ExecuteNonQuery();
-            }
-            catch (OracleException exception)
-            {
-                throw new RebusApplicationException(exception, $@"Error executing SQL command
+            throw new RebusApplicationException(exception, $@"Error executing SQL command
 {command.CommandText}
 ");
-            }
         }
+    }
 
-        class ConnectionWrapper : IDisposable
+    class ConnectionWrapper : IDisposable
+    {
+        public ConnectionWrapper(OracleDbConnection connection)
         {
-            public ConnectionWrapper(OracleDbConnection connection)
-            {
-                Connection = connection;
-                Semaphore = new SemaphoreSlim(1, 1);
-            }
-
-            public OracleDbConnection Connection { get; }
-            public SemaphoreSlim Semaphore { get; }
-
-            public void Dispose()
-            {
-                Connection?.Dispose();
-                Semaphore?.Dispose();
-            }
+            Connection = connection;
+            Semaphore = new SemaphoreSlim(1, 1);
         }
 
-        ConnectionWrapper GetConnection(ITransactionContext context)
-        {
-            return context
-                .GetOrAdd(CurrentConnectionKey,
-                    () =>
-                    {
-                        var dbConnection = _connectionHelper.GetConnection();
-                        var connectionWrapper = new ConnectionWrapper(dbConnection);
-                        context.OnCommitted(ctx =>
-                        {
-                            dbConnection.Complete();
-                            return Task.CompletedTask;
-                        });
-                        context.OnDisposed(ctx => connectionWrapper.Dispose());
-                        return connectionWrapper;
-                    });
-        }
+        public OracleDbConnection Connection { get; }
+        public SemaphoreSlim Semaphore { get; }
 
-
-        /// <inheritdoc />
         public void Dispose()
         {
-            if (_disposed) return;
-
-            try
-            {
-                _expiredMessagesCleanupTask.Dispose();
-            }
-            finally
-            {
-                _disposed = true;
-            }
+            Connection?.Dispose();
+            Semaphore?.Dispose();
         }
+    }
 
-        static int GetMessagePriority(Dictionary<string, string> headers)
+    /// <inheritdoc />
+    public void Dispose()
+    {
+        if (_disposed) return;
+
+        try
         {
-            var valueOrNull = headers.GetValueOrNull(MessagePriorityHeaderKey);
-            if (valueOrNull == null) return 0;
-
-            try
-            {
-                return int.Parse(valueOrNull);
-            }
-            catch (Exception exception)
-            {
-                throw new FormatException($"Could not parse '{valueOrNull}' into an Int32!", exception);
-            }
+            _expiredMessagesCleanupTask.Dispose();
         }
-
-        static int GetInitialVisibilityDelay(IDictionary<string, string> headers, DateTimeOffset now)
+        finally
         {
-            if (!headers.TryGetValue(Headers.DeferredUntil, out var deferredUntilDateTimeOffsetString))
-            {
-                return 0;
-            }
-
-            var deferredUntilTime = deferredUntilDateTimeOffsetString.ToDateTimeOffset();
-
-            headers.Remove(Headers.DeferredUntil);
-
-            return (int)(deferredUntilTime - now).TotalSeconds;
+            _disposed = true;
         }
+    }
 
-        static int GetTtlSeconds(IReadOnlyDictionary<string, string> headers)
+    static int GetMessagePriority(Dictionary<string, string> headers)
+    {
+        var valueOrNull = headers.GetValueOrNull(MessagePriorityHeaderKey);
+        if (valueOrNull == null) return 0;
+
+        try
         {
-            const int defaultTtlSecondsAbout60Years = int.MaxValue;
-
-            if (!headers.ContainsKey(Headers.TimeToBeReceived))
-                return defaultTtlSecondsAbout60Years;
-
-            var timeToBeReceivedStr = headers[Headers.TimeToBeReceived];
-            var timeToBeReceived = TimeSpan.Parse(timeToBeReceivedStr);
-
-            return (int)timeToBeReceived.TotalSeconds;
+            return int.Parse(valueOrNull);
         }
+        catch (Exception exception)
+        {
+            throw new FormatException($"Could not parse '{valueOrNull}' into an Int32!", exception);
+        }
+    }
+
+    static int GetInitialVisibilityDelay(IDictionary<string, string> headers, DateTimeOffset now)
+    {
+        if (!headers.TryGetValue(Headers.DeferredUntil, out var deferredUntilDateTimeOffsetString))
+        {
+            return 0;
+        }
+
+        var deferredUntilTime = deferredUntilDateTimeOffsetString.ToDateTimeOffset();
+
+        headers.Remove(Headers.DeferredUntil);
+
+        return (int)(deferredUntilTime - now).TotalSeconds;
+    }
+
+    static int GetTtlSeconds(IReadOnlyDictionary<string, string> headers)
+    {
+        const int defaultTtlSecondsAbout60Years = int.MaxValue;
+
+        if (!headers.ContainsKey(Headers.TimeToBeReceived))
+            return defaultTtlSecondsAbout60Years;
+
+        var timeToBeReceivedStr = headers[Headers.TimeToBeReceived];
+        var timeToBeReceived = TimeSpan.Parse(timeToBeReceivedStr);
+
+        return (int)timeToBeReceived.TotalSeconds;
     }
 }
