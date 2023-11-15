@@ -3,6 +3,7 @@
     <OutputType>Library</OutputType>
     <TargetFramework>netstandard2.0</TargetFramework>
     <LangVersion>11</LangVersion>
+    <RootNamespace>Rebus</RootNamespace>
     <Description>Rebus.Oracle.Devart</Description>
     <Authors>Jeffrey Wilbur</Authors>
     <RepositoryType>git</RepositoryType>
@@ -25,8 +26,8 @@
     </None>
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="Devart.Data.Oracle" Version="10.1.134" />
-    <PackageReference Include="Rebus" Version="8.0.0-alpha01" />
+    <PackageReference Include="Devart.Data.Oracle" Version="10.1.151" />
+    <PackageReference Include="Rebus" Version="8.0.1" />
   </ItemGroup>
 
 </Project>

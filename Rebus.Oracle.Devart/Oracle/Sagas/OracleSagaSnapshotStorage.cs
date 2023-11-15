@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using Devart.Data.Oracle;
 using Rebus.Auditing.Sagas;
-using Rebus.Extensions;
 using Rebus.Sagas;
 using Rebus.Serialization;
 
@@ -14,8 +13,8 @@ namespace Rebus.Oracle.Sagas;
 /// </summary>
 public class OracleSagaSnapshotStorage : ISagaSnapshotStorage
 {
-    readonly ObjectSerializer _objectSerializer = new ObjectSerializer();
-    readonly DictionarySerializer _dictionarySerializer = new DictionarySerializer();
+    readonly DictionarySerializer _dictionarySerializer = new();
+    readonly ObjectSerializer _objectSerializer = new();
     readonly OracleConnectionHelper _connectionHelper;
     readonly string _tableName;
 
@@ -33,28 +32,28 @@ public class OracleSagaSnapshotStorage : ISagaSnapshotStorage
     /// </summary>
     public Task Save(ISagaData sagaData, Dictionary<string, string> sagaAuditMetadata)
     {
-        using (var connection = _connectionHelper.GetConnection())
+        using var connection = _connectionHelper.GetConnection();
+        
+        using (var command = connection.CreateCommand())
         {
-            using (var command = connection.CreateCommand())
-            {
-                command.CommandText =
-                    $@"
+            command.CommandText =
+                $@"
                         INSERT
                             INTO {_tableName} (id, revision, data, metadata)
                             VALUES (:id, :revision, :data, :metadata)
                         ";
-                command.Parameters.Add("id", OracleDbType.Raw).Value = sagaData.Id;
-                command.Parameters.Add("revision", OracleDbType.Int64).Value = sagaData.Revision;
-                command.Parameters.Add("data", OracleDbType.Blob).Value = _objectSerializer.Serialize(sagaData);
-                command.Parameters.Add("metadata", OracleDbType.Clob).Value =
-                    _dictionarySerializer.SerializeToString(sagaAuditMetadata);
+            command.Parameters.Add("id", OracleDbType.Raw).Value = sagaData.Id;
+            command.Parameters.Add("revision", OracleDbType.Int64).Value = sagaData.Revision;
+            command.Parameters.Add("data", OracleDbType.Blob).Value = _objectSerializer.Serialize(sagaData);
+            command.Parameters.Add("metadata", OracleDbType.Clob).Value =
+                _dictionarySerializer.SerializeToString(sagaAuditMetadata);
 
-                command.ExecuteNonQuery();
-            }
-                
-            connection.Complete();
-            return Task.CompletedTask;
+            command.ExecuteNonQuery();
         }
+
+        connection.Complete();
+        
+        return Task.CompletedTask;
     }
 
     /// <summary>
@@ -62,16 +61,16 @@ public class OracleSagaSnapshotStorage : ISagaSnapshotStorage
     /// </summary>
     public void EnsureTableIsCreated()
     {
-        using (var connection = _connectionHelper.GetConnection())
+        using var connection = _connectionHelper.GetConnection();
+        
+        var tableNames = new HashSet<string>(connection.GetTableNames(), StringComparer.OrdinalIgnoreCase);
+
+        if (tableNames.Contains(_tableName)) return;
+
+        using (var command = connection.CreateCommand())
         {
-            var tableNames = connection.GetTableNames().ToHashSet();
-
-            if (tableNames.Contains(_tableName)) return;
-
-            using (var command = connection.CreateCommand())
-            {
-                command.CommandText =
-                    $@"
+            command.CommandText =
+                $@"
                         CREATE TABLE {_tableName} (
                             id RAW(16) NOT NULL,
                             revision NUMBER(10) NOT NULL,
@@ -81,10 +80,9 @@ public class OracleSagaSnapshotStorage : ISagaSnapshotStorage
                         )
                         ";
 
-                command.ExecuteNonQuery();
-            }
-
-            connection.Complete();
+            command.ExecuteNonQuery();
         }
+
+        connection.Complete();
     }
 }

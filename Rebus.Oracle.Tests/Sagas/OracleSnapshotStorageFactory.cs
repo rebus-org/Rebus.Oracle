@@ -22,34 +22,35 @@ namespace Rebus.Oracle.Tests.Sagas
 
         public IEnumerable<SagaDataSnapshot> GetAllSnapshots()
         {
-            using (var connection = OracleTestHelper.ConnectionHelper.OpenRaw())
+            using var connection = OracleTestHelper.ConnectionHelper.OpenRaw();
+
+            using var command = connection.CreateCommand();
+            
+            command.CommandText = $"SELECT data, metadata FROM {TableName}";
+
+            using var reader = command.ExecuteReader();
+            
+            while (reader.Read())
             {
-                using (var command = connection.CreateCommand())
+                var data = (byte[])reader["data"];
+                var metadataString = (string)reader["metadata"];
+
+                var objectSerializer = new ObjectSerializer();
+                var dictionarySerializer = new DictionarySerializer();
+
+                var sagaData = objectSerializer.Deserialize(data);
+                var metadata = dictionarySerializer.DeserializeFromString(metadataString);
+
+                yield return new SagaDataSnapshot
                 {
-                    command.CommandText = $@"SELECT data, metadata FROM {TableName}";
-
-                    using (var reader = command.ExecuteReader())
-                    {
-                        while (reader.Read())
-                        {
-                            var data = (byte[])reader["data"];
-                            var metadataString = (string)reader["metadata"];
-
-                            var objectSerializer = new ObjectSerializer();
-                            var dictionarySerializer = new DictionarySerializer();
-
-                            var sagaData = objectSerializer.Deserialize(data);
-                            var metadata = dictionarySerializer.DeserializeFromString(metadataString);
-
-                            yield return new SagaDataSnapshot
-                            {
-                                SagaData = (ISagaData) sagaData,
-                                Metadata = metadata
-                            };
-                        }
-                    }
-                }
+                    SagaData = (ISagaData) sagaData,
+                    Metadata = metadata
+                };
             }
+        }
+
+        public void Dispose()
+        {
         }
     }
 }
